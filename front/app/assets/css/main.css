@@ -1,0 +1,303 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+@custom-variant container-fluid (&:is(.container-fluid *));
+@custom-variant container-centered (&:is(.container-centered *));
+
+:root {
+  --primary: #ffcc05;
+  --primary-foreground: #1a1a1a;
+  --primary-content: #ffcc05;
+  --background: oklch(1 0 0);
+  --foreground: var(--color-neutral-950);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--color-neutral-950);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--color-neutral-950);
+  --secondary: var(--color-neutral-100);
+  --secondary-foreground: var(--color-neutral-900);
+  --muted: var(--color-neutral-100);
+  --muted-foreground: var(--color-neutral-500);
+  --accent: var(--color-neutral-100);
+  --accent-foreground: var(--color-neutral-900);
+  --destructive: var(--color-red-600);
+  --success: var(--color-green-600);
+  --warning: var(--color-yellow-600);
+  --info: var(--color-blue-600);
+  --border: var(--color-neutral-200);
+  --input: var(--color-neutral-200);
+  --ring: var(--primary);
+  --wms-paper: #fafaf9;
+  --wms-paper-raised: #ffffff;
+  --wms-ink: #181d26;
+  --wms-ink-soft: #525c6b;
+  --wms-ink-faint: #919aa8;
+  --wms-line: #e2e6ec;
+  --wms-steel-50: #f4f6f8;
+  --wms-steel-100: #e9edf2;
+  --wms-steel-800: #2d3544;
+  --wms-danger: #dc2626;
+  --wms-danger-soft: #fee2e2;
+  --wms-success-soft: #dcfce7;
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --font-sans: 'IRANYekan', 'IRANYekanWeb', 'IranYekan', 'Vazirmatn', Tahoma, sans-serif;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --primary: #ffcc05;
+  --primary-foreground: #1a1a1a;
+  --primary-content: #ffcc05;
+  --background: #000000;
+  --foreground: #f5f5f5;
+  --card: #0a0a0a;
+  --card-foreground: #f5f5f5;
+  --popover: #0a0a0a;
+  --popover-foreground: #f5f5f5;
+  --secondary: #141414;
+  --secondary-foreground: #f5f5f5;
+  --muted: #141414;
+  --muted-foreground: #a3a3a3;
+  --accent: #171717;
+  --accent-foreground: #f5f5f5;
+  --destructive: var(--color-red-400);
+  --success: var(--color-green-400);
+  --warning: var(--color-yellow-400);
+  --info: var(--color-blue-400);
+  --border: #292929;
+  --input: #292929;
+  --ring: var(--primary);
+  --wms-paper: #000000;
+  --wms-paper-raised: #0a0a0a;
+  --wms-ink: #f5f5f5;
+  --wms-ink-soft: #b3b3b3;
+  --wms-ink-faint: #737373;
+  --wms-line: #292929;
+  --wms-steel-50: #141414;
+  --wms-steel-100: #1f1f1f;
+  --wms-steel-800: #2a2a2a;
+  --wms-danger: #f87171;
+  --wms-danger-soft: #451a1a;
+  --wms-success-soft: #143522;
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+@layer components {
+  .dark .finance-content .bg-white,
+  .dark .finance-content .bg-paper-50 {
+    background-color: var(--card) !important;
+  }
+
+  .dark .finance-content .bg-paper-100,
+  .dark .finance-content .bg-paper-200 {
+    background-color: var(--secondary) !important;
+  }
+
+  .dark .finance-content .border-paper-100,
+  .dark .finance-content .border-paper-200 {
+    border-color: var(--border) !important;
+  }
+
+  .dark .finance-content .text-ink-900,
+  .dark .finance-content .text-ink-800 {
+    color: var(--foreground) !important;
+  }
+
+  .dark .finance-content .text-ink-700\/60,
+  .dark .finance-content .text-ink-700\/70,
+  .dark .finance-content .text-ink-700\/50,
+  .dark .finance-content .text-ink-700\/40 {
+    color: var(--muted-foreground) !important;
+  }
+
+  .dark .finance-content input,
+  .dark .finance-content textarea,
+  .dark .finance-content select {
+    background-color: var(--card);
+    color: var(--foreground);
+    border-color: var(--input);
+  }
+}
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-content: var(--primary-content);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-paper: var(--wms-paper);
+  --color-paper-raised: var(--wms-paper-raised);
+  --color-ink: var(--wms-ink);
+  --color-ink-soft: var(--wms-ink-soft);
+  --color-ink-faint: var(--wms-ink-faint);
+  --color-line: var(--wms-line);
+  --color-steel-50: var(--wms-steel-50);
+  --color-steel-100: var(--wms-steel-100);
+  --color-steel-800: var(--wms-steel-800);
+  --color-danger: var(--wms-danger);
+  --color-danger-soft: var(--wms-danger-soft);
+  --color-success-soft: var(--wms-success-soft);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-collapsible-down: collapsible-down 0.2s ease-in-out;
+  --animate-collapsible-up: collapsible-up 0.2s ease-in-out;
+  --animate-progress: progress 0.2s ease-in-out;
+  --animate-indeterminate-progress: indeterminate-progress 1400ms infinite linear;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--reka-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--reka-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  @keyframes collapsible-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--reka-collapsible-content-height);
+    }
+  }
+
+  @keyframes collapsible-up {
+    from {
+      height: var(--reka-collapsible-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  
+  @keyframes progress {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(-100%) translateX(var(--progress-percentage));
+    }
+  }
+
+  @keyframes indeterminate-progress {
+    0% {
+      background-position-x: var(--indicator);
+    }
+    80%, 100% {
+      background-position-x: -105%;
+    }
+  }
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border, currentColor);
+  }
+  * {
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent)
+  }
+
+  html {
+    color-scheme: light dark;
+    direction: rtl;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  html.light {
+    color-scheme: light;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--background);
+    color: var(--foreground);
+    direction: rtl;
+  }
+
+  input[type="email"],
+  input[type="url"],
+  input[type="tel"] {
+    direction: ltr;
+    text-align: left;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 40%, transparent);
+  }
+  
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* page transition */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 300ms;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}

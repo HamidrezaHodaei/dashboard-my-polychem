@@ -1,0 +1,54 @@
+<template>
+  <header
+    class="sticky top-0 z-30 overflow-hidden text-foreground before:border-border before:border-b before:bg-background/80 max-lg:shadow-sm before:absolute before:inset-0 before:backdrop-blur-md before:-z-10"
+    :class="[darkMode && 'dark', (darkMode && colorMode.value !== 'dark') && 'before:!bg-background']"
+  >
+    <h2 class="sr-only">
+      سربرگ
+    </h2>
+    <ContainerWrapper
+      container="fluid"
+      class="py-2 flex items-center justify-between h-(--header-height)"
+    >
+      <div class="flex items-center gap-x-3">
+        <div>
+          <Button
+            variant="ghost"
+            size="icon"
+            @click="toggleSidebar"
+          >
+            <Icon
+              name="lucide:panel-left"
+              class="text-xl size-5"
+              aria-hidden="true"
+            />
+            <span class="sr-only">باز و بسته کردن نوار کناری</span>
+          </Button>
+        </div>
+        <HeaderSearch />
+      </div>
+
+      <div class="flex items-center gap-x-3">
+        <HeaderNotifications />
+        <ColorModeButton />
+        <div class="h-6">
+          <Separator
+            :orientation="'vertical'"
+          />
+        </div>
+        <HeaderUserMenu />
+      </div>
+    </ContainerWrapper>
+  </header>
+</template>
+
+<script lang="ts" setup>
+import { useSidebar } from '@/components/ui/sidebar'
+
+defineProps<{
+  darkMode?: boolean
+}>()
+
+const colorMode = useColorMode()
+const { toggleSidebar } = useSidebar()
+</script>
