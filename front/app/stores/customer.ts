@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ApiError, apiFetch, apiFetchPage } from '~/services/backendApi'
+import type { MyActions, RequestReviewAction, RequestStatusKey } from '~/utils/request-workflow'
+import { ApiError, apiDownload, apiFetch, apiFetchPage } from '~/services/backendApi'
 
 export type CustomerType = 'INDIVIDUAL' | 'LEGAL'
 export type CommercialStatus
@@ -16,7 +17,8 @@ export type PaymentType = 'CASH' | 'CREDIT' | 'CASH_CREDIT'
 export type CreditRating = 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'WEAK' | 'BAD_DEBTOR' | 'NO_HISTORY' | 'NEEDS_REVIEW'
 /** Unit of every produced / consumed amount (whole numbers). Default: TON. */
 export type QuantityUnit = 'TON' | 'KG'
-export type OptionKind = 'PRODUCT' | 'GRADE'
+/** PRODUCED / CONSUMED are two independent pick-lists (produced vs consumed products); PRODUCT is the legacy shared one */
+export type OptionKind = 'PRODUCED' | 'CONSUMED' | 'GRADE' | 'PRODUCT'
 
 export interface OptionItem {
   id: number
@@ -84,6 +86,7 @@ export interface CustomerStats {
   follow_up_due: number
   unassigned: number
   not_finalized: number
+  pending_review: number
 }
 export interface LocationNode { province: string, count: number, cities: { city: string, count: number }[] }
 export interface AssignableUser { id: number, full_name: string }
@@ -117,6 +120,10 @@ export interface Customer {
   produced_products: ProducedProduct[]
   production_lines_count: number | null
   production_line_names: string[]
+  /** units per line, parallel to production_line_names; production_lines_count is their sum */
+  production_line_counts: number[]
+  /** the company's own phone (legal customers) */
+  company_phone: string | null
   /** tons per year: the sum of produced_products (computed by the server) */
   production_capacity: number | null
   factory_province: string | null
@@ -153,6 +160,13 @@ export interface Customer {
   is_finalized: boolean
   finalized_at: string | null
   finalized_by_user_id: number | null
+  /** request-review workflow (shared with suppliers / logistics) */
+  review_status: RequestStatusKey
+  review_note: string | null
+  decided_at: string | null
+  change_request_note: string | null
+  change_requested_at: string | null
+  my_actions?: MyActions
   is_active: boolean
   created_by_user_id: number | null
   created_by_name: string | null
@@ -171,6 +185,8 @@ export interface CustomerFilters {
   city: string
   activity_type: ActivityType | ''
   credit_rating: CreditRating | ''
+  /** request-review status ('' = all) */
+  review_status: RequestStatusKey | ''
   assigned_to: string // '' | 'none' | user id
   follow_up_due: boolean
   /** '-created_at' (default, newest first) | 'category' | '-category' (by industry) | 'next_follow_up_date' ... */
@@ -200,10 +216,11 @@ export const useCustomerStore = defineStore('customers', () => {
   const canCreate = computed(() => auth.hasPermission('crm.customer.create'))
   const canUpdate = computed(() => auth.hasPermission('crm.customer.update'))
   const canDelete = computed(() => auth.hasPermission('crm.customer.delete'))
+  const canExport = computed(() => auth.hasPermission('crm.customer.export'))
 
   const filters = reactive<CustomerFilters>({
     search: '', category: '', subcategory: '', commercial_status: '', operational_status: '',
-    customer_type: '', province: '', city: '', activity_type: '', credit_rating: '', assigned_to: '',
+    customer_type: '', province: '', city: '', activity_type: '', credit_rating: '', assigned_to: '', review_status: '',
     follow_up_due: false, sort: DEFAULT_SORT,
   })
 
@@ -228,6 +245,7 @@ export const useCustomerStore = defineStore('customers', () => {
         city: filters.city || undefined,
         activity_type: filters.activity_type || undefined,
         credit_rating: filters.credit_rating || undefined,
+        review_status: filters.review_status || undefined,
         assigned_to: filters.assigned_to || undefined,
         follow_up_due: filters.follow_up_due || undefined,
         sort: filters.sort || DEFAULT_SORT,
@@ -324,6 +342,7 @@ export const useCustomerStore = defineStore('customers', () => {
     filters.city = ''
     filters.activity_type = ''
     filters.credit_rating = ''
+    filters.review_status = ''
     filters.assigned_to = ''
     filters.follow_up_due = false
     filters.sort = DEFAULT_SORT
@@ -354,6 +373,41 @@ export const useCustomerStore = defineStore('customers', () => {
     replaceInList(updated)
     return updated
   }
+  /** the creator of a submitted request asks the manager to allow a change */
+  async function requestChange(id: number, reason: string) {
+    const updated = await apiFetch<Customer>(`/customers/${id}/request-change`, { method: 'POST', body: { reason } })
+    replaceInList(updated)
+    return updated
+  }
+  /** a manager decides: approve / reject / send back for edits (with a note) / reopen */
+  async function decideRequest(id: number, action: RequestReviewAction, note: string) {
+    const updated = await apiFetch<Customer>(`/customers/${id}/review`, { method: 'POST', body: { action, note: note || null } })
+    replaceInList(updated)
+    return updated
+  }
+  /** one file by id (e.g. when a notification points at a customer that is not on the current page) */
+  const fetchOne = (id: number) => apiFetch<Customer>(`/customers/${id}`)
+  /** Excel / Word of every customer matching the CURRENT filters (server checks `crm.customer.export`). */
+  async function exportFile(format: 'xlsx' | 'docx') {
+    await apiDownload('/customers/export', {
+      format,
+      search: filters.search.trim() || undefined,
+      category: filters.category || undefined,
+      subcategory: filters.subcategory || undefined,
+      commercial_status: filters.commercial_status || undefined,
+      operational_status: filters.operational_status || undefined,
+      customer_type: filters.customer_type || undefined,
+      province: filters.province || undefined,
+      city: filters.city || undefined,
+      activity_type: filters.activity_type || undefined,
+      credit_rating: filters.credit_rating || undefined,
+      review_status: filters.review_status || undefined,
+      assigned_to: filters.assigned_to || undefined,
+      follow_up_due: filters.follow_up_due || undefined,
+      sort: filters.sort || DEFAULT_SORT,
+      include_inactive: true,
+    }, `customers-${new Date().toISOString().slice(0, 10)}.${format}`)
+  }
   async function removeCustomer(id: number) {
     await apiFetch(`/customers/${id}`, { method: 'DELETE' })
     customers.value = customers.value.filter(c => c.id !== id)
@@ -362,11 +416,11 @@ export const useCustomerStore = defineStore('customers', () => {
 
   return {
     customers, categories, categoryItems, optionItems, options, stats, locations, assignees,
-    total, page, perPage, loading, loadError, filters, canCreate, canUpdate, canDelete,
+    total, page, perPage, loading, loadError, filters, canCreate, canUpdate, canDelete, canExport, exportFile,
     load, loadOptions, loadStats, loadLocations, loadAssignees, loadCategories, loadCategoryItems,
     loadOptionItems, addOptionItem, updateOptionItem, removeOptionItem,
     addCategory, updateCategory, removeCategory,
     setPage, applyFilters, resetFilters,
-    updateCustomer, setCommercialStatus, createCustomer, finalizeCustomer, removeCustomer,
+    updateCustomer, setCommercialStatus, createCustomer, finalizeCustomer, requestChange, decideRequest, fetchOne, removeCustomer,
   }
 })

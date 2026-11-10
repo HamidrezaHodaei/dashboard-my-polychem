@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ApiError, apiFetch, apiFetchPage } from '~/services/backendApi'
+import { ApiError, apiDownload, apiFetch, apiFetchPage } from '~/services/backendApi'
 
 export interface CrmCustomerRef { id: number, name: string, province: string | null, industry: string | null }
 /** A product is an entry of the CUSTOMER BANK's product list -- CRM has no product table of its own. */
@@ -26,6 +26,10 @@ export interface CrmSale {
   jalali_year: number
   jalali_month: number
   description: string | null
+  /** who registered the sale (a fixed text) and when -- Tehran time, ISO + ready-to-show Jalali "1405/08/18 14:32" */
+  created_by_name: string | null
+  created_at: string | null
+  created_at_display: string | null
 }
 
 export interface CrmGroupRow { id: number | null, name: string, amount: number, quantity_kg: number }
@@ -221,7 +225,12 @@ export const useCrmStore = defineStore('crm', () => {
       '/crm/sales/import', { method: 'POST', body: { rows, dry_run: dryRun } },
     )
 
-  /** Every sale matching the CURRENT filters (for CSV / print), fetched page by page. */
+  /** Excel / Word of every sale matching the CURRENT filters (server checks `crm.sale.export`). */
+  async function exportFile(format: 'xlsx' | 'docx') {
+    await apiDownload('/crm/sales/export', { ...filterQuery(), sort: sort.value, format }, `crm-sales-${new Date().toISOString().slice(0, 10)}.${format}`)
+  }
+
+  /** Every sale matching the CURRENT filters (for print), fetched page by page. */
   async function fetchAllSales(limit = 5000): Promise<CrmSale[]> {
     const out: CrmSale[] = []
     for (let p = 1; out.length < limit; p++) {
@@ -243,7 +252,7 @@ export const useCrmStore = defineStore('crm', () => {
     filters, sales, total, page, perPage, sort, salesLoading, salesError, analytics, analyticsLoading, analyticsError,
     options, products, paymentMethods, activeFilterCount,
     filterQuery, validateFilters, loadSales, loadAnalytics, setPage, resetFilters, loadOptions, loadCatalog,
-    searchCustomers, customerById, createSale, updateSale, deleteSale, importSales, fetchAllSales,
+    searchCustomers, customerById, createSale, updateSale, deleteSale, importSales, fetchAllSales, exportFile,
     savePaymentMethod, removePaymentMethod,
   }
 })

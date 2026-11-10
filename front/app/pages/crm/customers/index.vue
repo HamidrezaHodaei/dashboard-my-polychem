@@ -7,12 +7,22 @@
       description="پرونده‌ی مشتریان را بررسی کنید، وضعیت تجاری را پیگیری کنید یا مشتری جدیدی اضافه کنید."
       :action-label="store.canCreate ? 'افزودن مشتری' : undefined"
       @action="openCreate"
-    />
+    >
+    <template #actions>
+      <ExportButtons
+        v-if="store.canExport"
+        :busy="exporting"
+        :disabled="!store.total"
+        @export="runExport"
+      />
+    </template>
+    </AccessPageHeader>
 
-    <div class="grid gap-4 sm:grid-cols-4">
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
       <AccessStat label="تعداد کل مشتریان" :value="store.stats?.total ?? store.total" icon="lucide:users" />
       <AccessStat label="پیگیری سررسیدشده" :value="store.stats?.follow_up_due ?? 0" icon="lucide:alarm-clock" />
       <AccessStat label="جذب‌شده و فعال" :value="acquiredCount" icon="lucide:badge-check" />
+      <AccessStat label="در انتظار بررسی" :value="store.stats?.pending_review ?? 0" icon="lucide:timer" />
       <AccessStat label="از دست رفته" :value="store.stats?.by_commercial_status?.INACTIVE_LOST ?? 0" icon="lucide:ban" />
     </div>
 
@@ -79,6 +89,14 @@
             <SelectContent>
               <SelectItem value="all">همه نوع‌های فعالیت</SelectItem>
               <SelectItem v-for="o in activityOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select v-model="reviewStatusModel">
+            <SelectTrigger class="w-full"><SelectValue placeholder="وضعیت درخواست" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">همه وضعیت‌های درخواست</SelectItem>
+              <SelectItem v-for="(label, code) in REVIEW_FILTER_LABELS" :key="code" :value="code">{{ label }}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -151,6 +169,7 @@
               </TableHead>
               <TableHead>موقعیت</TableHead>
               <TableHead>راه ارتباطی</TableHead>
+              <TableHead>وضعیت درخواست</TableHead>
               <TableHead>وضعیت تجاری</TableHead>
               <TableHead>مسئول پیگیری</TableHead>
               <TableHead>پیگیری بعدی</TableHead>
@@ -211,6 +230,19 @@
                 <span v-else class="text-xs text-muted-foreground">—</span>
               </TableCell>
               <TableCell>
+                <RequestStatusBadge
+                  :status="c.review_status"
+                  :draft="!c.is_finalized"
+                  :change-requested="!!c.change_request_note"
+                />
+                <p
+                  v-if="c.review_note && (c.review_status === 'NEEDS_EDIT' || c.review_status === 'REJECTED')"
+                  class="mt-1 max-w-48 truncate text-xs text-muted-foreground"
+                  dir="auto"
+                  :title="c.review_note"
+                >{{ c.review_note }}</p>
+              </TableCell>
+              <TableCell>
                 <Select
                   :model-value="c.commercial_status"
                   :disabled="!store.canUpdate"
@@ -248,7 +280,28 @@
                   >
                     <Icon name="lucide:shopping-cart" class="size-4" />
                   </Button>
-                  <Button v-if="store.canUpdate" variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openEdit(c)">
+                  <Button
+                    v-if="c.my_actions?.can_review && requestReviewActionsFor(c.review_status).length"
+                    variant="ghost" size="icon" title="بررسی درخواست" aria-label="بررسی درخواست" @click="openReview(c)"
+                  >
+                    <Icon name="lucide:shield-check" class="size-4" />
+                  </Button>
+                  <Button
+                    v-if="c.my_actions?.can_finalize"
+                    variant="ghost" size="icon"
+                    :title="c.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد (ارسال برای بررسی)' : 'ثبت نهایی'"
+                    :aria-label="c.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد' : 'ثبت نهایی'"
+                    @click="finalizeRow(c)"
+                  >
+                    <Icon name="lucide:send" class="size-4" />
+                  </Button>
+                  <Button
+                    v-if="c.my_actions?.can_request_change"
+                    variant="ghost" size="icon" title="درخواست تغییر اطلاعات" aria-label="درخواست تغییر اطلاعات" @click="openChangeRequest(c)"
+                  >
+                    <Icon name="lucide:file-pen-line" class="size-4" />
+                  </Button>
+                  <Button v-if="c.my_actions?.can_edit ?? store.canUpdate" variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openEdit(c)">
                     <Icon name="lucide:pencil" class="size-4" />
                   </Button>
                   <Button
@@ -272,25 +325,18 @@
         </div>
       </div>
 
-      <div
-        v-if="store.total > store.perPage"
-        class="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"
-      >
-        <span>صفحه {{ store.page }} از {{ pageCount }} &middot; مجموع {{ store.total }} مورد</span>
-        <div class="flex gap-2">
-          <Button variant="outline" size="sm" :disabled="store.page <= 1 || store.loading" @click="store.setPage(store.page - 1)">
-            قبلی
-          </Button>
-          <Button variant="outline" size="sm" :disabled="store.page >= pageCount || store.loading" @click="store.setPage(store.page + 1)">
-            بعدی
-          </Button>
-        </div>
-      </div>
+      <NumberedPagination
+        :page="store.page"
+        :page-size="store.perPage"
+        :total="store.total"
+        :loading="store.loading"
+        @update:page="store.setPage"
+      />
     </Card>
 
     <!-- View details -->
     <Dialog v-model:open="viewOpen">
-      <DialogContent class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+      <DialogContent class="fixed !inset-0 !left-0 !top-0 !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 flex flex-col gap-0 overflow-hidden !rounded-none border-0 p-0 sm:!max-w-none">
         <DialogHeader class="border-b px-6 py-4 text-right">
           <div class="flex flex-wrap items-center gap-2">
             <DialogTitle class="text-lg font-semibold" dir="auto">{{ viewing?.display_name }}</DialogTitle>
@@ -299,9 +345,12 @@
               {{ statusLabel(viewing.commercial_status) }}
             </Badge>
             <Badge v-if="viewing?.operational_status === 'INACTIVE'" variant="secondary">غیرفعال</Badge>
-            <Badge v-if="viewing" :variant="viewing.is_finalized ? 'default' : 'outline'">
-              {{ viewing.is_finalized ? 'نهایی‌شده' : 'پیش‌نویس' }}
-            </Badge>
+            <RequestStatusBadge
+              v-if="viewing"
+              :status="viewing.review_status"
+              :draft="!viewing.is_finalized"
+              :change-requested="!!viewing.change_request_note"
+            />
           </div>
           <DialogDescription>
             {{ viewing?.created_by_name ? `تکمیل‌شده توسط ${viewing.created_by_name}` : 'پرونده‌ی مشتری' }}
@@ -309,7 +358,15 @@
           </DialogDescription>
         </DialogHeader>
 
-        <div v-if="viewing" class="flex-1 space-y-7 overflow-y-auto px-6 py-6 text-sm">
+        <RequestBanner
+          v-if="viewing"
+          class="px-6 pt-4"
+          :status="viewing.review_status"
+          :note="viewing.review_note"
+          :change-request-note="viewing.change_request_note"
+        />
+        <DetailNav :watch-key="viewing?.id" />
+        <div v-if="viewing" class="detail-body flex-1 overflow-y-auto bg-muted/20 px-6 py-6 text-sm">
           <section class="space-y-3">
             <h3 class="font-semibold">اطلاعات پایه</h3>
             <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -434,18 +491,44 @@
 
         <DialogFooter class="border-t bg-muted/30 px-6 py-4">
           <Button variant="outline" @click="viewOpen = false">بستن</Button>
-          <Button v-if="store.canUpdate && viewing && !viewing.is_finalized" variant="outline" class="gap-2" @click="finalizeViewing">
-            <Icon name="lucide:badge-check" class="size-4" /> ثبت نهایی
+          <Button
+            v-if="viewing?.my_actions?.can_review && requestReviewActionsFor(viewing.review_status).length"
+            class="gap-2" @click="openReview(viewing)"
+          >
+            <Icon name="lucide:shield-check" class="size-4" /> بررسی درخواست
           </Button>
-          <Button v-if="store.canUpdate && viewing" class="gap-2" @click="editFromView">
+          <Button v-if="viewing?.my_actions?.can_request_change" variant="outline" class="gap-2" @click="openChangeRequest(viewing)">
+            <Icon name="lucide:file-pen-line" class="size-4" /> درخواست تغییر اطلاعات
+          </Button>
+          <Button v-if="viewing?.my_actions?.can_finalize" variant="outline" class="gap-2" @click="finalizeRow(viewing)">
+            <Icon name="lucide:send" class="size-4" /> {{ viewing.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد' : 'ثبت نهایی' }}
+          </Button>
+          <Button v-if="viewing && (viewing.my_actions?.can_edit ?? store.canUpdate)" class="gap-2" @click="editFromView">
             <Icon name="lucide:pencil" class="size-4" /> ویرایش
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
 
+    <!-- Request review: a manager approves / rejects / sends the request back with a written reason -->
+    <RequestReviewDialog
+      v-model:open="reviewOpen"
+      :title="reviewing?.display_name ?? ''"
+      :status="reviewing?.review_status ?? 'PENDING'"
+      :change-request-note="reviewing?.change_request_note"
+      :saving="reviewSaving"
+      @submit="submitReview"
+    />
+    <RequestChangeRequestDialog
+      v-model:open="changeOpen"
+      :title="changing?.display_name ?? ''"
+      :saving="changeSaving"
+      @submit="submitChangeRequest"
+    />
+
     <!-- Add / edit wizard -->
-    <CustomerFormWizard
+    <LazyCustomerFormWizard
+      v-if="wizardLoaded"
       v-model:open="formOpen"
       :customer="editing"
       @saved="onSaved"
@@ -467,6 +550,8 @@ import {
   PURCHASE_LABELS, SOURCE_LABELS, commercialBadgeVariant,
 } from '~/utils/customer-form'
 import { formatJalali, todayIso } from '~/utils/jalali'
+import type { RequestReviewAction } from '~/utils/request-workflow'
+import { requestErrorMessage, requestReviewActionsFor } from '~/utils/request-workflow'
 
 definePageMeta({ title: 'مشتریان' })
 const crmAccess = useCrmAccess()
@@ -523,7 +608,23 @@ onMounted(async () => {
     store.load(), store.loadOptions(), store.loadAssignees(), reloadReferenceData(),
   ])
   appliedKey = filterKey()
+  await openFromQuery()
 })
+
+/* ── Excel / Word export of the current filters (needs `crm.customer.export`) ── */
+const exporting = ref<'' | 'xlsx' | 'docx'>('')
+async function runExport(format: 'xlsx' | 'docx') {
+  exporting.value = format
+  try {
+    await store.exportFile(format)
+  }
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'دریافت خروجی انجام نشد.'))
+  }
+  finally {
+    exporting.value = ''
+  }
+}
 
 const pageCount = computed(() => Math.max(1, Math.ceil(store.total / store.perPage)))
 
@@ -580,6 +681,13 @@ const cityModel = computed({
 const activityModel = computed({
   get: () => store.filters.activity_type || 'all',
   set: (v: string) => { store.filters.activity_type = v === 'all' ? '' : v as typeof store.filters.activity_type },
+})
+const REVIEW_FILTER_LABELS = {
+  PENDING: 'در انتظار بررسی', APPROVED: 'تأیید', REJECTED: 'رد درخواست', NEEDS_EDIT: 'نیازمند ویرایش یا تکمیل اطلاعات',
+} as const
+const reviewStatusModel = computed({
+  get: () => store.filters.review_status || 'all',
+  set: (v: string) => { store.filters.review_status = v === 'all' ? '' : v as typeof store.filters.review_status },
 })
 const creditRatingModel = computed({
   get: () => store.filters.credit_rating || 'all',
@@ -656,6 +764,7 @@ const identityRows = computed<Row[]>(() => {
         { label: 'نام شرکت', value: c.company_name },
         { label: 'شناسه ملی', value: c.company_national_id },
         { label: 'شماره ثبت', value: c.registration_number },
+        { label: 'تلفن شرکت', value: c.company_phone },
         { label: 'شناسه اقتصادی', value: c.economic_id },
         { label: 'تاریخ شروع فعالیت', value: formatJalali(c.activity_start_date) },
       ]
@@ -688,8 +797,8 @@ const activityRows = computed<Row[]>(() => {
     { label: 'شهر', value: c.factory_city },
     { label: 'موقعیت', value: c.factory_location },
     { label: 'مختصات', value: c.latitude !== null && c.longitude !== null ? `${c.latitude}, ${c.longitude}` : '' },
-    { label: 'تعداد خطوط تولید', value: fmtNum(c.production_lines_count) },
-    { label: 'نام خطوط تولید', value: (c.production_line_names ?? []).filter(Boolean).join('، '), wide: true },
+    { label: 'تعداد کل خطوط تولید', value: fmtNum(c.production_lines_count) },
+    { label: 'خطوط تولید (نام و تعداد)', value: (c.production_line_names ?? []).map((n, i) => n ? `${n} (${fmtNum(c.production_line_counts?.[i] ?? 1)})` : '').filter(Boolean).join('، '), wide: true },
     { label: 'ظرفیت تولید کارخانه', value: c.production_capacity === null || c.production_capacity === undefined ? '' : `${fmtNum(c.production_capacity)} تن در سال` },
   ]
 })
@@ -736,20 +845,91 @@ const followRows = computed<Row[]>(() => {
   ]
 })
 
-async function finalizeViewing() {
-  if (!viewing.value) return
+/* ── request workflow: review (managers) · ثبت نهایی / ثبت مجدد and change request (the creator) ── */
+const reviewOpen = ref(false)
+const reviewing = ref<Customer | null>(null)
+const reviewSaving = ref(false)
+function openReview(c: Customer) {
+  reviewing.value = c
+  reviewOpen.value = true
+}
+async function submitReview(action: RequestReviewAction, note: string) {
+  if (!reviewing.value) return
+  reviewSaving.value = true
   try {
-    viewing.value = await store.finalizeCustomer(viewing.value.id)
-    notify.success('پرونده‌ی مشتری نهایی شد.')
+    const updated = await store.decideRequest(reviewing.value.id, action, note)
+    notify.success(`«${updated.display_name}»: وضعیت درخواست به‌روزرسانی شد.`)
+    reviewOpen.value = false
+    if (viewing.value?.id === updated.id) viewing.value = updated
     store.loadStats()
   }
-  catch (err) {
-    notify.error(err instanceof ApiError ? err.message : 'ثبت نهایی انجام نشد.')
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'ثبت تصمیم انجام نشد.'))
+  }
+  finally {
+    reviewSaving.value = false
+  }
+}
+async function finalizeRow(c: Customer) {
+  try {
+    const resubmit = c.review_status === 'NEEDS_EDIT'
+    const updated = await store.finalizeCustomer(c.id)
+    notify.success(resubmit ? 'درخواست دوباره برای بررسی ثبت شد.' : 'درخواست ثبت نهایی شد و در صف بررسی قرار گرفت.')
+    if (viewing.value?.id === c.id) viewing.value = updated
+    store.loadStats()
+  }
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'ثبت نهایی انجام نشد.'))
+  }
+}
+const changeOpen = ref(false)
+const changing = ref<Customer | null>(null)
+const changeSaving = ref(false)
+function openChangeRequest(c: Customer) {
+  changing.value = c
+  changeOpen.value = true
+}
+async function submitChangeRequest(reason: string) {
+  if (!changing.value) return
+  changeSaving.value = true
+  try {
+    const updated = await store.requestChange(changing.value.id, reason)
+    notify.success('درخواست تغییر برای مدیر ارسال شد.')
+    changeOpen.value = false
+    if (viewing.value?.id === updated.id) viewing.value = updated
+  }
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'ارسال درخواست انجام نشد.'))
+  }
+  finally {
+    changeSaving.value = false
   }
 }
 
+/* ── a notification points here with ?open=<id>: show that file right away ── */
+const route = useRoute()
+async function openFromQuery() {
+  const raw = Array.isArray(route.query.open) ? route.query.open[0] : route.query.open
+  const id = Number(raw)
+  if (!raw || !Number.isInteger(id) || id < 1) return
+  try {
+    const c = store.customers.find(x => x.id === id) ?? await store.fetchOne(id)
+    openView(c)
+  }
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'این پرونده پیدا نشد یا اجازهٔ دیدن آن را ندارید.'))
+  }
+  finally {
+    await navigateTo({ path: route.path, query: { ...route.query, open: undefined } }, { replace: true })
+  }
+}
+watch(() => route.query.open, (v) => { if (v) openFromQuery() })
+
 /* ── add / edit ── */
 const formOpen = ref(false)
+// the big wizard is downloaded only when it is first opened (keeps the list page fast to load)
+const wizardLoaded = ref(false)
+watch(formOpen, (v) => { if (v) wizardLoaded.value = true })
 const editing = ref<Customer | null>(null)
 function openCreate() {
   editing.value = null

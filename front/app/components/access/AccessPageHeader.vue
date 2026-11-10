@@ -9,10 +9,13 @@
       <h1 class="text-2xl font-semibold tracking-tight">{{ title }}</h1>
       <p class="mt-1 text-sm text-muted-foreground">{{ description }}</p>
     </div>
-    <Button v-if="actionLabel" class="gap-2" @click="$emit('action')">
-      <Icon name="lucide:plus" class="size-4" />
-      {{ actionLabel }}
-    </Button>
+    <div class="flex flex-wrap items-center gap-2">
+      <slot name="actions" />
+      <Button v-if="actionLabel" class="gap-2" @click="$emit('action')">
+        <Icon name="lucide:plus" class="size-4" />
+        {{ actionLabel }}
+      </Button>
+    </div>
   </div>
 </template>
 

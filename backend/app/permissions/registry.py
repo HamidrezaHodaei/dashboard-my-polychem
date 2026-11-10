@@ -231,12 +231,34 @@ _LOGISTICS_DEFINITIONS: list[PermissionDefinition] = [
     for _action in LOGISTICS_ACTIONS
 ]
 
+# ---------------------------------------------------------------------
+# Extra, non-CRUD permissions of the business modules (granted from the permission matrix):
+#   review   decide on a registration request (customers, suppliers)
+#   export   download the list as Excel / Word (customers, suppliers, logistics, sales)
+#   print    print the sales report
+# None of them is delegable: they release data / decide on other people's requests.
+# ---------------------------------------------------------------------
+EXTRA_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
+    ("crm", "customer", "review"), ("crm", "customer", "export"),
+    ("procurement", "supplier", "review"), ("procurement", "supplier", "export"),
+    ("logistics", "company", "export"), ("logistics", "driver", "export"),
+    ("crm", "sale", "export"), ("crm", "sale", "print"),
+)
+_EXTRA_DEFINITIONS: list[PermissionDefinition] = [
+    PermissionDefinition(
+        key=f"{_m}.{_r}.{_a}", module=_m, resource=_r, action=_a, is_delegable=False,
+        description=f"{_a.capitalize()} {_m} {_r} records.",
+    )
+    for _m, _r, _a in EXTRA_PERMISSIONS
+]
+
 REGISTRY: dict[str, PermissionDefinition] = {
     AUTHZ_GRANT_DELEGATE.key: AUTHZ_GRANT_DELEGATE,
     **{definition.key: definition for definition in _CORE_DEFINITIONS},
     **{definition.key: definition for definition in _TASK_DEFINITIONS},
     **{definition.key: definition for definition in _BUSINESS_DEFINITIONS},
     **{definition.key: definition for definition in _LOGISTICS_DEFINITIONS},
+    **{definition.key: definition for definition in _EXTRA_DEFINITIONS},
 }
 
 
@@ -272,16 +294,16 @@ MATRIX_MODULES: tuple[MatrixModule, ...] = (
     MatrixModule("core.department", "Departments"),
     MatrixModule("core.team", "Teams"),
     MatrixModule("tasks.task", "Tasks"),
-    MatrixModule("crm.customer", "CRM"),
-    MatrixModule("crm.sale", "CRM Sales"),
+    MatrixModule("crm.customer", "CRM", ("review", "export")),
+    MatrixModule("crm.sale", "CRM Sales", ("export", "print")),
     MatrixModule("crm.product", "CRM Products"),
     MatrixModule("finance.transaction", "Finance"),
     MatrixModule("warehouse.stock", "Warehouse"),
     MatrixModule("website.page", "Website"),
     MatrixModule("reports.report", "Reports"),
-    MatrixModule("procurement.supplier", "Suppliers"),
-    MatrixModule("logistics.company", "Transport Companies", ("review",)),
-    MatrixModule("logistics.driver", "Drivers", ("review",)),
+    MatrixModule("procurement.supplier", "Suppliers", ("review", "export")),
+    MatrixModule("logistics.company", "Transport Companies", ("review", "export")),
+    MatrixModule("logistics.driver", "Drivers", ("review", "export")),
 )
 
 

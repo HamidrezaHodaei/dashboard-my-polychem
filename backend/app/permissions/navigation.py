@@ -43,7 +43,10 @@ def _entry(key: str, label: str, path: str, permission: str) -> dict:
             f"Navigation entry {key!r} references undefined permission {permission!r}"
         )
     prefix = _resource_prefix(permission)
-    gating_permissions = tuple(k for k in REGISTRY if k.startswith(prefix))
+    # export / print are not a reason to show a section on their own (they only matter next to `read`)
+    gating_permissions = tuple(
+        k for k in REGISTRY if k.startswith(prefix) and k.rsplit(".", 1)[-1] not in ("export", "print")
+    )
     return {
         "key": key,
         "label": label,

@@ -102,6 +102,11 @@ class TaskPublic(BaseModel):
     can_manage: bool = False  # set per caller by the route: may rename / delete this task and remove notes, checklist items
     created_at: datetime
     updated_at: datetime
+    completed_at: datetime | None = None
+
+    @field_serializer("completed_at")
+    def _utc_opt(self, v: datetime | None):
+        return None if v is None else (v if v.tzinfo else v.replace(tzinfo=timezone.utc)).isoformat()
 
     @field_serializer("created_at", "updated_at")
     def _utc(self, v: datetime):

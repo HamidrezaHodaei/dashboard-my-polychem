@@ -146,10 +146,11 @@ const store = useCustomerStore()
 const notify = useNotify()
 
 const tabs: { kind: OptionKind, label: string }[] = [
-  { kind: 'PRODUCT', label: 'نام محصول' },
+  { kind: 'PRODUCED', label: 'محصولات تولیدی' },
+  { kind: 'CONSUMED', label: 'محصولات مصرفی' },
   { kind: 'GRADE', label: 'نام گرید' },
 ]
-const kind = ref<OptionKind>('PRODUCT')
+const kind = ref<OptionKind>('PRODUCED')
 const newName = ref('')
 const editingId = ref<number | null>(null)
 const editName = ref('')

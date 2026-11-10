@@ -26,10 +26,8 @@
               <SelectItem value="-quantity_kg">بیشترین مقدار</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" class="gap-2" :disabled="exporting || !store.total" @click="exportCsv">
-            <Icon name="lucide:download" class="size-4" /> خروجی CSV
-          </Button>
-          <Button variant="outline" size="sm" class="gap-2" :disabled="exporting || !store.total" @click="printReport">
+          <ExportButtons v-if="access.canExportSale.value" :busy="exportBusy" :disabled="!store.total" @export="runExport" />
+          <Button v-if="access.canPrintSale.value" variant="outline" size="sm" class="gap-2" :disabled="exporting || !store.total" @click="printReport">
             <Icon name="lucide:printer" class="size-4" /> چاپ
           </Button>
           <Button v-if="access.canCreateSale.value" variant="outline" size="sm" class="gap-2" @click="importOpen = true">
@@ -52,6 +50,7 @@
               <TableHead>مبلغ (ریال)</TableHead>
               <TableHead>نوع</TableHead>
               <TableHead>پرداخت</TableHead>
+              <TableHead>ثبت‌کننده</TableHead>
               <TableHead class="text-right">عملیات</TableHead>
             </TableRow>
           </TableHeader>
@@ -75,6 +74,10 @@
                 <p class="mt-1 text-xs text-muted-foreground">{{ SALE_STATUS_LABELS[s.status] }}</p>
               </TableCell>
               <TableCell class="text-sm">{{ s.payment_method?.name ?? '—' }}</TableCell>
+              <TableCell class="text-sm">
+                <p dir="auto">{{ s.created_by_name || '—' }}</p>
+                <p v-if="s.created_at_display" class="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">{{ toPersianDigits(s.created_at_display) }}</p>
+              </TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-1">
                   <Button variant="ghost" size="icon" title="مشاهده" aria-label="مشاهده" @click="openDialog('view', s)">
@@ -160,34 +163,23 @@ async function afterImport() {
 }
 
 /* ── export: ALL rows of the current filters (not just this page) ── */
-const COLUMNS = ['تاریخ', 'مشتری', 'استان', 'گرید', 'مقدار (کیلوگرم)', 'فی (ریال)', 'مبلغ خالص (ریال)', 'نوع سند', 'نوع فروش', 'پرداخت', 'وضعیت', 'توضیحات']
+const COLUMNS = ['تاریخ', 'مشتری', 'استان', 'گرید', 'مقدار (کیلوگرم)', 'فی (ریال)', 'مبلغ خالص (ریال)', 'نوع سند', 'نوع فروش', 'پرداخت', 'وضعیت', 'توضیحات', 'ثبت‌کننده', 'تاریخ و ساعت ثبت']
 const toRow = (s: CrmSale) => [
   s.date, s.customer.name, s.customer.province ?? '', s.product.name, s.net_quantity_kg, s.unit_price, s.net_amount,
   s.is_return ? 'برگشت از فروش' : 'فاکتور فروش', SALE_TYPE_LABELS[s.sale_type], s.payment_method?.name ?? '',
-  SALE_STATUS_LABELS[s.status], s.description ?? '',
+  SALE_STATUS_LABELS[s.status], s.description ?? '', s.created_by_name ?? '', s.created_at_display ?? '',
 ]
-async function exportCsv() {
-  exporting.value = true
+const exportBusy = ref<'' | 'xlsx' | 'docx'>('')
+async function runExport(format: 'xlsx' | 'docx') {
+  exportBusy.value = format
   try {
-    const rows = (await store.fetchAllSales()).map(toRow)
-    // Quote every cell; neutralise spreadsheet formulas (=,+,-,@) in text.
-    const cell = (v: unknown) => {
-      const t = typeof v === 'string' && /^[=+\-@]/.test(v) ? `'${v}` : String(v)
-      return `"${t.replace(/"/g, '""')}"`
-    }
-    const csv = [COLUMNS, ...rows].map(r => r.map(cell).join(',')).join('\r\n')
-    const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `crm-sales-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    await store.exportFile(format)
   }
-  catch {
-    notify.error('خروجی گرفته نشد')
+  catch (err) {
+    notify.error('خروجی گرفته نشد', err instanceof Error ? err.message : undefined)
   }
   finally {
-    exporting.value = false
+    exportBusy.value = ''
   }
 }
 async function printReport() {

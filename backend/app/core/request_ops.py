@@ -7,13 +7,54 @@ the CALLER writes the audit log and commits.
 from datetime import datetime, timezone
 
 from app.core import request_workflow as wf
+from app.core.authorization.models import PermissionEffect, UserPermissionScope, UserRole
+from app.core.permissions.models import Permission
+from app.core.roles.models import Role
+from app.core.users.models import User
+from app.extensions import db
 from app.modules.notifications import services as notifications
+from app.permissions.service import has_permission
 from app.permissions.exceptions import PermissionDeniedError
 from app.utils.exceptions import ConflictError
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def reviewer_ids(permission_key: str, *, exclude: int | None = None) -> list[int]:
+    """Active users who hold `permission_key` (the module's `review` permission), via a role or a
+    direct grant -- the managers who must be told that a request is waiting for them."""
+    perm = db.session.query(Permission).filter_by(key=permission_key).first()
+    if perm is None:
+        return []
+    from app.core.authorization.models import RolePermissionScope
+    via_role = {
+        r[0] for r in db.session.query(UserRole.user_id)
+        .join(RolePermissionScope, RolePermissionScope.role_id == UserRole.role_id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(RolePermissionScope.permission_id == perm.id, RolePermissionScope.is_active.is_(True),
+                Role.is_active.is_(True), Role.deleted_at.is_(None))
+    }
+    direct = {
+        r[0] for r in db.session.query(UserPermissionScope.user_id).filter(
+            UserPermissionScope.permission_id == perm.id, UserPermissionScope.is_active.is_(True),
+            UserPermissionScope.effect == PermissionEffect.ALLOW)
+    }
+    out = []
+    for user in db.session.query(User).filter(User.id.in_(via_role | direct), User.is_active.is_(True)).all():
+        if user.id != exclude and has_permission(user, permission_key, None, None):
+            out.append(user.id)
+    return out
+
+
+def _managers(rec, actor_id: int, review_key: str | None) -> list[int]:
+    """Who to tell: the manager who last decided on the record, else every reviewer."""
+    if rec.decided_by_user_id and rec.decided_by_user_id != actor_id:
+        return [rec.decided_by_user_id]
+    if rec.decided_by_user_id:
+        return []
+    return reviewer_ids(review_key, exclude=actor_id) if review_key else []
 
 
 def creator_may_edit(rec, actor_id: int) -> bool:
@@ -38,7 +79,7 @@ def viewer_flags(rec, actor_id: int, *, can_update: bool, can_review: bool) -> d
     }
 
 
-def finalize(rec, actor, *, can_update: bool, link: str) -> str:
+def finalize(rec, actor, *, can_update: bool, link: str, review_key: str | None = None) -> str:
     """ثبت نهایی (first submit) or ثبت مجدد (after corrections) -> back in the review queue."""
     if not (rec.created_by_user_id == actor.id or can_update):
         raise PermissionDeniedError("permission_denied", "Only the creator of this request can submit it.")
@@ -51,15 +92,22 @@ def finalize(rec, actor, *, can_update: bool, link: str) -> str:
         rec.finalized_at = _now()
     if hasattr(rec, "finalized_by_user_id"):
         rec.finalized_by_user_id = actor.id
-    if resubmission and rec.decided_by_user_id and rec.decided_by_user_id != actor.id:
-        notifications.notify(
-            rec.decided_by_user_id, "REVIEW_RESUBMITTED", "درخواست پس از اصلاح دوباره ثبت شد",
-            f"«{rec.display_name}» پس از اعمال اصلاحات دوباره برای بررسی ثبت شد.", link=link,
-        )
+    if resubmission:
+        for uid in _managers(rec, actor.id, review_key):
+            notifications.notify(
+                uid, "REVIEW_RESUBMITTED", "درخواست پس از اصلاح دوباره ثبت شد",
+                f"«{rec.display_name}» پس از اعمال اصلاحات دوباره برای بررسی ثبت شد.", link=link,
+            )
+    elif review_key:  # first submission: every manager who can review is told a request is waiting
+        for uid in reviewer_ids(review_key, exclude=actor.id):
+            notifications.notify(
+                uid, "REVIEW_REQUEST", "درخواست جدید در انتظار بررسی",
+                f"{actor.full_name} «{rec.display_name}» را برای بررسی ثبت کرد.", link=link,
+            )
     return "resubmit" if resubmission else "finalize"
 
 
-def request_change(rec, actor, reason: str, *, link: str) -> None:
+def request_change(rec, actor, reason: str, *, link: str, review_key: str | None = None) -> None:
     if not wf.can_request_change(
         created_by_user_id=rec.created_by_user_id, actor_id=actor.id,
         status=rec.review_status, is_finalized=rec.is_finalized,
@@ -67,9 +115,9 @@ def request_change(rec, actor, reason: str, *, link: str) -> None:
         raise PermissionDeniedError("permission_denied", "You cannot request a change for this record.")
     rec.change_request_note = reason
     rec.change_requested_at = _now()
-    if rec.decided_by_user_id and rec.decided_by_user_id != actor.id:
+    for uid in _managers(rec, actor.id, review_key):
         notifications.notify(
-            rec.decided_by_user_id, "CHANGE_REQUEST", "درخواست تغییر اطلاعات",
+            uid, "CHANGE_REQUEST", "درخواست تغییر اطلاعات",
             f"{actor.full_name} برای «{rec.display_name}» درخواست تغییر اطلاعات ثبت کرد: {reason}", link=link,
         )
 

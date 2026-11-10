@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ApiError, apiFetch, apiFetchBlob, apiFetchPage } from '~/services/backendApi'
+import { ApiError, apiDownload, apiFetch, apiFetchBlob, apiFetchPage } from '~/services/backendApi'
 import type { FileRef } from '~/utils/supplier-form'
 import type { MyActions } from '~/utils/request-workflow'
 import type {
@@ -67,7 +67,7 @@ export interface LogisticsFilters {
 }
 
 const apiMessage = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback)
-const ACTIONS = ['read', 'create', 'update', 'delete', 'review'] as const
+const ACTIONS = ['read', 'create', 'update', 'delete', 'review', 'export'] as const
 type Action = typeof ACTIONS[number]
 
 export const useLogisticsStore = defineStore('logistics', () => {
@@ -141,6 +141,21 @@ export const useLogisticsStore = defineStore('logistics', () => {
     return reference.value
   }
 
+  /** Export is allowed per applicant type (`logistics.company.export` / `logistics.driver.export`). */
+  const canExport = computed(() => can('COMPANY', 'export') || can('DRIVER', 'export'))
+  /** Excel / Word of every registration matching the CURRENT filters (only the types the user may export). */
+  async function exportFile(format: 'xlsx' | 'docx') {
+    await apiDownload('/logistics/export', {
+      format,
+      search: filters.search.trim() || undefined,
+      applicant_type: filters.applicant_type || undefined,
+      status: filters.status || undefined,
+      area_type: filters.area_type || undefined,
+      province: filters.applicant_type !== 'DRIVER' ? filters.province || undefined : undefined,
+      vehicle_type: filters.applicant_type !== 'COMPANY' ? filters.vehicle_type || undefined : undefined,
+      include_inactive: true,
+    }, `logistics-${new Date().toISOString().slice(0, 10)}.${format}`)
+  }
   const fetchOne = (id: number) => apiFetch<LogisticsApplicant>(`/logistics/applicants/${id}`)
 
   /** Same rules the final save applies, for ONE step (+ early duplicate detection). */
@@ -228,7 +243,7 @@ export const useLogisticsStore = defineStore('logistics', () => {
 
   return {
     applicants, total, page, perPage, loading, loadError, filters, stats, reference,
-    types, can, typesWith,
+    types, can, typesWith, canExport, exportFile,
     load, loadStats, loadReference, fetchOne, validateStep, uploadFile, downloadFile,
     setPage, applyFilters, resetFilters, createApplicant, updateApplicant, review, finalize, requestChange, removeApplicant,
   }

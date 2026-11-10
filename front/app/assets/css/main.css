@@ -301,3 +301,101 @@
 .page-leave-to {
   opacity: 0;
 }
+
+/* print / PDF of a single chart or report (utils/printElement.ts) */
+@media print {
+  body.printing-one * {
+    visibility: hidden !important;
+  }
+  body.printing-one .print-target,
+  body.printing-one .print-target * {
+    visibility: visible !important;
+  }
+  body.printing-one .print-target {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.printing-one .print-hide,
+  body.printing-one .print-hide * {
+    display: none !important;
+  }
+}
+
+/* Customer wizard: placeholders (and the dots / punctuation inside them) sit on the RIGHT, in RTL order.
+   Empty `dir=auto` fields otherwise resolve to LTR and push "…" / ":" to the wrong end; LTR-only
+   fields (phone, postal code) keep their digits left-to-right but start from the right edge. */
+.customer-wizard input::placeholder,
+.customer-wizard textarea::placeholder {
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+.customer-wizard input:placeholder-shown,
+.customer-wizard textarea:placeholder-shown {
+  direction: rtl;
+  text-align: right;
+}
+.customer-wizard [data-slot="select-trigger"],
+.customer-wizard [data-slot="select-value"] {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+/* ── full-screen detail modals (customers / suppliers / logistics) ──
+   The sections of `.detail-body` become cards in a responsive grid that uses the whole screen. */
+.detail-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: 1.25rem;
+  align-items: start;
+  width: 100%;
+  max-width: 120rem;
+  margin-inline: auto;
+}
+.detail-body > section {
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--card);
+  padding: 1.25rem 1.5rem;
+  scroll-margin-top: 0.75rem;
+}
+.detail-body > section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.detail-body > section > h3::before {
+  content: "";
+  width: 0.25rem;
+  height: 1.1rem;
+  border-radius: 9999px;
+  background: var(--primary);
+}
+.detail-body dt {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-bottom: 0.15rem;
+}
+.detail-body dd {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+/* sections that hold long lists use the full row */
+.detail-body > section:first-child,
+.detail-body > section.detail-wide {
+  grid-column: 1 / -1;
+}

@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 
 from app.core import request_ops
+from app.modules.notifications import services as notifications
 from app.core.audit_logs.services import write_audit_log
 from app.core.users.models import User
 from app.extensions import db
@@ -34,14 +35,19 @@ ENTITY_TYPE = "customer"
 # JSON-column fields: dumped in JSON mode (dates -> ISO strings) so they can be stored.
 _JSON_FIELDS = (
     "contacts", "industries", "produced_products", "consumed_products", "current_suppliers", "contact_log",
-    "production_line_names",
+    "production_line_names", "production_line_counts",
 )
 # Identity fields that only apply to one customer type.
 _INDIVIDUAL_ONLY = ("first_name", "last_name", "national_id", "brand_name")
-_LEGAL_ONLY = ("company_name", "company_national_id", "registration_number", "economic_id", "activity_start_date")
+_LEGAL_ONLY = ("company_name", "company_national_id", "registration_number", "economic_id", "activity_start_date", "company_phone")
 
 
-LINK = "/crm"
+LINK = "/crm/customers"
+
+
+def _link(customer) -> str:
+    """Where a notification about this record leads: the customer bank, with the file opened."""
+    return f"{LINK}?open={customer.id}"
 
 
 def _can(actor: User, action: str) -> bool:
@@ -171,7 +177,7 @@ def list_customers(
     commercial_statuses: list[str] | None = None, operational_status: str = "", customer_type: str = "",
     province: str = "", city: str = "", activity_type: str = "", assigned_to: str = "", credit_rating: str = "",
     follow_up_due: bool = False, is_finalized: bool | None = None, include_inactive: bool = False,
-    sort: str = "-created_at",
+    sort: str = "-created_at", review_status: str = "",
 ):
     _require(actor, "read")
 
@@ -202,6 +208,10 @@ def list_customers(
         query = query.filter(Customer.assigned_to_user_id == int(assigned_to))
     if is_finalized is not None:
         query = query.filter(Customer.is_finalized.is_(is_finalized))
+    if review_status in ("PENDING", "APPROVED", "REJECTED", "NEEDS_EDIT"):
+        query = query.filter(Customer.review_status == review_status)
+        if review_status == "PENDING":  # the review queue: submitted requests only, not drafts
+            query = query.filter(Customer.is_finalized.is_(True))
     if follow_up_due:
         query = query.filter(
             Customer.next_follow_up_date.isnot(None),
@@ -244,6 +254,7 @@ def customer_stats(actor: User) -> dict:
         "follow_up_due": due,
         "unassigned": base.filter(Customer.assigned_to_user_id.is_(None)).count(),
         "not_finalized": base.filter(Customer.is_finalized.is_(False)).count(),
+        "pending_review": base.filter(Customer.review_status == "PENDING", Customer.is_finalized.is_(True)).count(),
     }
 
 
@@ -344,9 +355,14 @@ def _check_merged(customer: Customer) -> None:
     # names is left alone; clients clear it by sending production_lines_count: null.)
     names = customer.production_line_names or []
     if names:
-        customer.production_lines_count = len(names)
+        # units per line (default 1) stay parallel to the names; the total is their sum
+        counts = [int(n) for n in (customer.production_line_counts or [])][: len(names)]
+        counts += [1] * (len(names) - len(counts))
+        customer.production_line_counts = counts
+        customer.production_lines_count = sum(counts)
     else:
         customer.production_line_names = []
+        customer.production_line_counts = []
 
     # نام شرکت یا برند belongs to individual customers only.
     if customer.customer_type == CustomerType.LEGAL:
@@ -492,6 +508,12 @@ def create_customer(actor: User, payload: CustomerCreate, *, ip_address: str | N
         user_id=actor.id, action="create", module=MODULE, entity_type=ENTITY_TYPE, entity_id=customer.id,
         metadata={"display_name": customer.display_name, "finalized": customer.is_finalized}, ip_address=ip_address,
     )
+    if customer.is_finalized:  # saved & submitted in one go: tell the managers a request is waiting
+        for uid in request_ops.reviewer_ids("crm.customer.review", exclude=actor.id):
+            notifications.notify(
+                uid, "REVIEW_REQUEST", "درخواست جدید در انتظار بررسی",
+                f"{actor.full_name} «{customer.display_name}» را برای بررسی ثبت کرد.", link=_link(customer),
+            )
     db.session.commit()
     return customer
 
@@ -566,7 +588,9 @@ def finalize_customer(actor: User, customer_id: int, *, ip_address: str | None) 
         if not (customer.created_by_user_id == actor.id or _can(actor, "update")):
             _require(actor, "update")
         return customer
-    kind = request_ops.finalize(customer, actor, can_update=_can(actor, "update"), link=LINK)
+    kind = request_ops.finalize(
+        customer, actor, can_update=_can(actor, "update"), link=_link(customer), review_key="crm.customer.review"
+    )
     write_audit_log(
         user_id=actor.id, action=kind, module=MODULE, entity_type=ENTITY_TYPE, entity_id=customer.id,
         ip_address=ip_address,
@@ -577,7 +601,7 @@ def finalize_customer(actor: User, customer_id: int, *, ip_address: str | None) 
 
 def request_customer_change(actor: User, customer_id: int, reason: str, *, ip_address: str | None) -> Customer:
     customer = _get_or_404(customer_id)
-    request_ops.request_change(customer, actor, reason, link=LINK)
+    request_ops.request_change(customer, actor, reason, link=_link(customer), review_key="crm.customer.review")
     write_audit_log(user_id=actor.id, action="change_request", module=MODULE, entity_type=ENTITY_TYPE,
                     entity_id=customer.id, ip_address=ip_address)
     db.session.commit()
@@ -587,7 +611,7 @@ def request_customer_change(actor: User, customer_id: int, reason: str, *, ip_ad
 def review_customer(actor: User, customer_id: int, action: str, note: str | None, *, ip_address: str | None) -> Customer:
     _require(actor, "review")
     customer = _get_or_404(customer_id)
-    previous, new = request_ops.review(customer, actor, action, note, link=LINK)
+    previous, new = request_ops.review(customer, actor, action, note, link=_link(customer))
     write_audit_log(user_id=actor.id, action=f"review_{action.lower()}", module=MODULE, entity_type=ENTITY_TYPE,
                     entity_id=customer.id, metadata={"from": previous, "to": new}, ip_address=ip_address)
     db.session.commit()
@@ -832,14 +856,22 @@ def _rename_option_in_customers(kind: OptionKind, old: str, new: str) -> None:
             [dict(p) for p in cust.consumed_products or []],
             [{**sp, "grades": [dict(g) for g in sp.get("grades") or []]} for sp in cust.current_suppliers or []],
         )
-        if kind == OptionKind.PRODUCT:
-            for p in produced + consumed:
+        if kind in (OptionKind.PRODUCT, OptionKind.PRODUCED, OptionKind.CONSUMED):
+            # produced and consumed products are separate lists: a rename only touches its own side
+            # (the legacy shared list touches both)
+            targets = []
+            if kind in (OptionKind.PRODUCT, OptionKind.PRODUCED):
+                targets += produced
+            if kind in (OptionKind.PRODUCT, OptionKind.CONSUMED):
+                targets += consumed
+            for p in targets:
                 if p.get("name") == old:
                     p["name"], changed = new, True
-            for sp in suppliers:
-                for g in sp["grades"]:
-                    if g.get("product") == old:
-                        g["product"], changed = new, True
+            if kind in (OptionKind.PRODUCT, OptionKind.CONSUMED):
+                for sp in suppliers:
+                    for g in sp["grades"]:
+                        if g.get("product") == old:
+                            g["product"], changed = new, True
         else:
             for p in consumed:
                 if p.get("grade_specs") == old:
@@ -881,8 +913,8 @@ def delete_option_item(actor: User, option_id: int, *, ip_address: str | None) -
     """Removes the name from the selectable list; customers already using it keep their value."""
     _require(actor, "update")
     o = _get_option_or_404(option_id)
-    if o.kind == OptionKind.PRODUCT:
-        # CRM sales reference the product list directly (crm_sales.product_id), so a product that has
+    if o.kind == OptionKind.GRADE:
+        # CRM sales reference the grade list directly (crm_sales.product_id), so a grade that has
         # recorded sales cannot be removed -- deactivate it instead (it stays on old sales).
         from app.modules.crm.models import CrmSale  # local import: crm depends on customers, not vice versa
 

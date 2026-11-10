@@ -194,3 +194,24 @@ export async function apiFetchBlob(path: string, _isRetry = false): Promise<Blob
     throw new ApiError(status ?? 0, 'DOWNLOAD_FAILED', message)
   }
 }
+
+/** Downloads a server-generated file (Excel / Word export) with the current filters as the query. */
+export async function apiDownload(
+  path: string,
+  query: Record<string, string | number | boolean | undefined | null>,
+  filename: string,
+): Promise<void> {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
+  }
+  const blob = await apiFetchBlob(qs.size ? `${path}?${qs.toString()}` : path)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}

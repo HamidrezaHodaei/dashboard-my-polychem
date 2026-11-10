@@ -20,9 +20,15 @@ const BASE_COLUMNS = [
   { action: 'delete', label: 'حذف' },
 ]
 // Extra columns appear only when some row offers them (logistics rows add «بررسی» = approve / reject / suspend).
-const columns = computed(() => props.modules.some(m => m.actions.includes('review'))
-  ? [...BASE_COLUMNS, { action: 'review', label: 'بررسی' }]
-  : BASE_COLUMNS)
+const EXTRA_COLUMNS = [
+  { action: 'review', label: 'بررسی' },
+  { action: 'export', label: 'خروجی Excel/Word' },
+  { action: 'print', label: 'چاپ' },
+]
+const columns = computed(() => [
+  ...BASE_COLUMNS,
+  ...EXTRA_COLUMNS.filter(c => props.modules.some(m => m.actions.includes(c.action))),
+])
 const actionsOf = (moduleKey: string) => props.modules.find(m => m.key === moduleKey)?.actions ?? []
 const has = (moduleKey: string, action: string) => actionsOf(moduleKey).includes(action)
 

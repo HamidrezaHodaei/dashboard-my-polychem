@@ -9,6 +9,9 @@ export function useCrmAccess() {
     canCreateSale: can('crm.sale.create'),
     canUpdateSale: can('crm.sale.update'),
     canDeleteSale: can('crm.sale.delete'),
+    // Excel / Word download and printing of the sales report are separate, non-CRUD permissions.
+    canExportSale: can('crm.sale.export'),
+    canPrintSale: can('crm.sale.print'),
     canReadCatalog: can('crm.product.read'),
     canCreateCatalog: can('crm.product.create'),
     canUpdateCatalog: can('crm.product.update'),

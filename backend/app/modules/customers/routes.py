@@ -8,6 +8,8 @@ update|delete>` and are checked in services.py. Static paths (`/options`, `/stat
 from flask import Blueprint, g, request
 
 from app.core.auth.decorators import require_authenticated
+from app.core.export_files import collect_pages, send_export
+from app.modules import export_rows
 from app.modules.customers import services
 from app.core.request_schemas import ChangeRequestIn, ReviewIn
 from app.modules.customers.schemas import (
@@ -129,14 +131,11 @@ def delete_option_item(option_id: int):
 
 
 # ── customers ────────────────────────────────────────────────────────
-@bp.get("")
-@require_authenticated
-def list_customers():
-    page, per_page = parse_pagination(request.args)
+def _list_kwargs() -> dict:
+    """The filters of the list screen -- shared by the table and the Excel / Word export."""
     args = request.args
     statuses = [s.strip() for raw in args.getlist("commercial_status") for s in raw.split(",") if s.strip()]
-    items, total = services.list_customers(
-        g.current_user, page=page, per_page=per_page,
+    return dict(
         search=args.get("search", ""), category=args.get("category", ""), subcategory=args.get("subcategory", ""),
         commercial_statuses=statuses, operational_status=args.get("operational_status", ""),
         customer_type=args.get("customer_type", ""), province=args.get("province", ""), city=args.get("city", ""),
@@ -145,11 +144,29 @@ def list_customers():
         follow_up_due=_flag(args.get("follow_up_due", "")) is True,
         is_finalized=_flag(args.get("is_finalized", "")),
         include_inactive=_flag(args.get("include_inactive", "")) is True,
-        sort=args.get("sort", "-created_at"),
+        sort=args.get("sort", "-created_at"), review_status=args.get("review_status", ""),
     )
+
+
+@bp.get("")
+@require_authenticated
+def list_customers():
+    page, per_page = parse_pagination(request.args)
+    items, total = services.list_customers(g.current_user, page=page, per_page=per_page, **_list_kwargs())
     return success_response(
         data=[_dump(item) for item in items], meta={"page": page, "per_page": per_page, "total": total}
     )
+
+
+@bp.get("/export")
+@require_authenticated
+def export_customers():
+    """Excel / Word of the customers matching the current filters (`crm.customer.export`)."""
+    export_rows.require_export(g.current_user, "crm.customer.export")
+    kwargs = _list_kwargs()
+    items = collect_pages(lambda p, n: services.list_customers(g.current_user, page=p, per_page=n, **kwargs))
+    title, headers, rows = export_rows.customers_table(items)
+    return send_export(request.args.get("format", "xlsx"), title=title, filename="customers", headers=headers, rows=rows)
 
 
 @bp.get("/<int:customer_id>")

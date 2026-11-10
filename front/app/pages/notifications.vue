@@ -161,6 +161,7 @@ const iconFor = (type: string) => ({
   REVIEW_RESULT: 'lucide:badge-check',
   REVIEW_RESUBMITTED: 'lucide:rotate-ccw',
   CHANGE_REQUEST: 'lucide:file-pen-line',
+  REVIEW_REQUEST: 'lucide:inbox',
 } as Record<string, string>)[type] ?? 'lucide:bell'
 
 async function load(reset: boolean) {
@@ -196,7 +197,8 @@ async function open(n: AppNotification) {
     store.markRead([n.id]).catch(() => {})
     items.value = items.value.map(x => (x.id === n.id ? { ...x, is_read: true } : x))
   }
-  if (n.link) await navigateTo(n.link)
+  // older notifications were saved with the bare `/crm` link -- send them to the customer bank
+  if (n.link) await navigateTo(n.link === '/crm' ? '/crm/customers' : n.link)
 }
 
 async function markAll() {

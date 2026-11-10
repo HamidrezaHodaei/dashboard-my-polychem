@@ -28,6 +28,7 @@ from datetime import datetime
 from sqlalchemy import JSON, Boolean, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.creator_snapshot import display_name as _creator_display, register as _register_creator
 from app.core.base import ActiveFlagMixin, BigIntUnsigned, SoftDeleteMixin, TimestampMixin
 from app.extensions import db
 
@@ -131,6 +132,9 @@ class Supplier(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # The creator's name as TEXT, written once when the record is created (never a live join): it stays
+    # correct when the account is renamed, re-assigned, moved or removed. See core/creator_snapshot.py.
+    creator_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     reviewed_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -145,7 +149,7 @@ class Supplier(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
     @property
     def created_by_name(self) -> str | None:
         """Staff member who added this supplier; None for public-form rows."""
-        return self.created_by.full_name if self.created_by is not None else None
+        return _creator_display(self)
 
     @property
     def display_name(self) -> str:
@@ -201,3 +205,6 @@ class SupplierFile(TimestampMixin, db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<SupplierFile id={self.id} name={self.original_name!r}>"
+
+
+_register_creator(Supplier)

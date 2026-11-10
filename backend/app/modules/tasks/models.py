@@ -8,9 +8,9 @@ the actual checks live in app/modules/tasks/services.py via
 app/permissions/*.
 """
 import enum
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import event, JSON, Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import BigIntUnsigned, SoftDeleteMixin, TimestampMixin, _utcnow
@@ -74,6 +74,9 @@ class Task(TimestampMixin, SoftDeleteMixin, db.Model):
         default=TaskStatus.TODO,
     )
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # When the task reached DONE (naive UTC) -- kept by the `status` listener below, so it is right on
+    # every path (edit, approval, bulk). Feeds on-time rate / average completion time in the KPI analytics.
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Optional time of day of the deadline, in Tehran time (the date is a calendar date, not a UTC instant).
     due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     is_draft: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
@@ -277,3 +280,12 @@ class TaskFile(TimestampMixin, db.Model):
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     uploaded_by: Mapped["User | None"] = relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+@event.listens_for(Task.status, "set")
+def _track_completion(target, value, oldvalue, initiator):  # noqa: ANN001
+    """completed_at follows the status: stamped when a task becomes DONE, cleared when it is reopened."""
+    if value == TaskStatus.DONE and target.completed_at is None:
+        target.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    elif value != TaskStatus.DONE:
+        target.completed_at = None

@@ -275,7 +275,7 @@
 
             <div class="space-y-3">
               <div
-                v-for="task in boardTasks[column]"
+                v-for="task in visibleBoard(column)"
                 :key="task.id"
                 class="min-w-0 cursor-pointer overflow-hidden rounded-xl border bg-background p-3 shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/20"
                 @click="openTask(task.id, task.projectId)"
@@ -330,6 +330,20 @@
                 </div>
               </div>
 
+              <Button
+                v-if="(boardTasks[column]?.length || 0) > BOARD_LIMIT"
+                variant="ghost"
+                size="sm"
+                class="w-full justify-center gap-1 text-xs text-muted-foreground"
+                @click="toggleColumn(column)"
+              >
+                <Icon
+                  :name="expandedColumns.has(column) ? 'lucide:chevron-up' : 'lucide:chevron-down'"
+                  class="size-3.5"
+                />
+                {{ expandedColumns.has(column) ? 'نمایش کمتر' : `بیشتر (${(boardTasks[column]?.length || 0) - BOARD_LIMIT} مورد دیگر)` }}
+              </Button>
+
               <div
                 v-if="!boardTasks[column]?.length"
                 class="rounded-xl border border-dashed border-border bg-background/50 p-4 text-center text-sm text-muted-foreground"
@@ -342,29 +356,44 @@
       </Card>
 
       <div class="min-w-0 space-y-6">
-        <Card class="gap-4 p-4 shadow-none">
-          <h3 class="text-base font-semibold">
-            حجم کار اعضا
-          </h3>
-          <div class="space-y-4">
+        <PrintableChart
+          title="Monthly Productivity Overview"
+          class="gap-4 p-4 shadow-none"
+        >
+          <div class="pl-16">
+            <h3 class="text-base font-semibold">
+              Monthly Productivity Overview
+            </h3>
+            <p class="text-xs text-muted-foreground">
+              وضعیت بهره‌وری و فعالیت اعضا در بازهٔ ماهانه
+            </p>
+          </div>
+          <TaskProductivityChart :points="monthlyPoints" />
+          <div
+            v-if="memberMonthActivity.length"
+            class="space-y-2 border-t pt-3"
+          >
+            <p class="text-xs font-medium text-muted-foreground">
+              فعالیت اعضا در {{ currentMonthLabel }} (وظایف تکمیل‌شده)
+            </p>
             <div
-              v-for="member in workloadStats"
+              v-for="member in memberMonthActivity"
               :key="member.name"
-              class="space-y-2"
+              class="space-y-1"
             >
               <div class="flex items-center justify-between gap-3 text-sm">
                 <span class="min-w-0 truncate">{{ member.name }}</span>
-                <span class="shrink-0 whitespace-nowrap text-muted-foreground">{{ member.count }} مورد</span>
+                <span class="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{{ member.completed }} از {{ member.assigned }}</span>
               </div>
-              <div class="h-2 overflow-hidden rounded-full bg-muted">
+              <div class="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
-                  class="h-full rounded-full bg-secondary"
+                  class="h-full rounded-full bg-success"
                   :style="{ width: `${member.width}%` }"
                 />
               </div>
             </div>
           </div>
-        </Card>
+        </PrintableChart>
 
         <Card class="gap-4 p-4 shadow-none">
           <h3 class="text-base font-semibold">
@@ -527,26 +556,115 @@
           </div>
         </div>
 
-        <div class="flex items-center justify-between border-b border-border/80 px-5 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 px-5 py-3">
           <div class="flex items-center gap-1 rounded-lg border border-border/80 bg-muted/30 p-1">
-            <Button variant="secondary" size="icon" class="size-8 rounded-md" aria-label="نمای فهرست">
+            <Button
+              :variant="projectView === 'list' ? 'secondary' : 'ghost'"
+              size="icon"
+              class="size-8 rounded-md"
+              aria-label="نمای فهرست"
+              title="نمای فهرست"
+              @click="projectView = 'list'"
+            >
               <Icon name="lucide:list" class="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" class="size-8 rounded-md text-muted-foreground" aria-label="نمای برد">
+            <Button
+              :variant="projectView === 'board' ? 'secondary' : 'ghost'"
+              size="icon"
+              class="size-8 rounded-md"
+              aria-label="نمای برد"
+              title="نمای برد"
+              @click="projectView = 'board'"
+            >
               <Icon name="lucide:columns-2" class="size-4" />
             </Button>
-            <Button variant="ghost" size="icon" class="size-8 rounded-md text-muted-foreground" aria-label="نمای تقویم">
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-8 rounded-md text-muted-foreground"
+              aria-label="نمای تقویم"
+              title="رفتن به تقویم"
+              @click="navigateTo('/tasks/calendar')"
+            >
               <Icon name="lucide:calendar-days" class="size-4" />
             </Button>
           </div>
 
-          <Button variant="outline" class="h-9 gap-2 rounded-md">
-            <Icon name="lucide:upload" class="size-4" />
-            درون‌ریزی CSV
-          </Button>
+          <div
+            v-if="selectedIds.size"
+            class="flex flex-wrap items-center gap-2 text-sm"
+          >
+            <span class="text-muted-foreground">{{ selectedIds.size }} مورد انتخاب شد</span>
+            <Button size="sm" variant="outline" class="gap-1.5" @click="bulkDone">
+              <Icon name="lucide:check-check" class="size-4" /> انجام شد
+            </Button>
+            <Button size="sm" variant="outline" class="gap-1.5" @click="bulkArchive">
+              <Icon name="lucide:archive" class="size-4" /> بایگانی
+            </Button>
+            <Button size="sm" variant="ghost" @click="selectedIds = new Set()">
+              لغو انتخاب
+            </Button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <Button
+              variant="outline"
+              class="h-9 gap-2 rounded-md"
+              title="ستون‌ها: عنوان، توضیحات، اولویت (کم/متوسط/زیاد/فوری)، موعد (۱۴۰۵/۰۸/۲۰)"
+              @click="csvInput?.click()"
+            >
+              <Icon name="lucide:upload" class="size-4" />
+              درون‌ریزی CSV
+            </Button>
+            <input
+              ref="csvInput"
+              type="file"
+              accept=".csv,text/csv"
+              class="hidden"
+              @change="onCsvPicked"
+            >
+          </div>
         </div>
 
-        <div class="divide-y divide-border/80">
+        <!-- board view of this department -->
+        <div
+          v-if="projectView === 'board'"
+          class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-4 bg-muted/10 p-4"
+        >
+          <div
+            v-for="column in ['todo', 'in-progress', 'review', 'done']"
+            :key="column"
+            class="min-w-0 rounded-xl border bg-muted/20 p-3"
+          >
+            <div class="mb-3 flex items-center justify-between">
+              <span class="text-sm font-medium">{{ columnLabel(column) }}</span>
+              <Badge variant="secondary">{{ projectBoard[column]?.length || 0 }}</Badge>
+            </div>
+            <div class="max-h-[28rem] space-y-2 overflow-y-auto pr-0.5">
+              <button
+                v-for="task in projectBoard[column]"
+                :key="task.id"
+                type="button"
+                class="block w-full rounded-lg border bg-background p-3 text-right text-sm hover:border-primary"
+                @click="openTask(task.id)"
+              >
+                <span class="block break-words font-medium [overflow-wrap:anywhere]">{{ task.title }}</span>
+                <span class="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{{ fmtDue(task) }}</span>
+                  <TaskPriorityBadge :priority="task.priority" />
+                </span>
+              </button>
+              <p v-if="!projectBoard[column]?.length" class="py-4 text-center text-xs text-muted-foreground">
+                موردی نیست
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="projectView === 'list'"
+          class="divide-y divide-border/80"
+        >
           <div
             v-for="task in projectDetailTasks"
             :key="task.id"
@@ -556,13 +674,16 @@
             <input
               type="checkbox"
               class="size-4 shrink-0 accent-primary"
-              :aria-label="`Select ${task.title}`"
+              :aria-label="`انتخاب ${task.title}`"
+              :checked="selectedIds.has(task.id)"
               @click.stop
+              @change="toggleSelected(task.id)"
             >
             <button
               type="button"
               class="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/80 text-muted-foreground hover:border-primary hover:text-primary"
-              :aria-label="`Advance ${task.title}`"
+              :aria-label="`مرحله بعد: ${task.title}`"
+              title="مرحله بعد"
               @click.stop="advanceTask(task.id)"
             >
               <Icon name="lucide:minus" class="size-3.5" />
@@ -587,18 +708,39 @@
               <Icon name="lucide:calendar-days" class="size-3.5" />
               {{ fmtDue(task) }}
             </span>
-            <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-              {{ getProjectInitial(getUserName(task.assigneeId)) }}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-8 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-              aria-label="عملیات امور محوله"
-              @click.stop="markDone(task.id)"
+            <span
+              class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+              :title="getAssigneeNames(task)"
             >
-              <Icon name="lucide:ellipsis" class="size-4" />
-            </Button>
+              {{ getProjectInitial(getAssigneeNames(task)) }}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover:opacity-100"
+                  aria-label="عملیات امور محوله"
+                  @click.stop
+                >
+                  <Icon name="lucide:ellipsis" class="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem @select="openTask(task.id)">
+                  <Icon name="lucide:external-link" class="size-4" /> باز کردن
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="advanceTask(task.id)">
+                  <Icon name="lucide:arrow-left-to-line" class="size-4" /> مرحله بعد
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="markDone(task.id)">
+                  <Icon name="lucide:check" class="size-4" /> {{ store.isAssignee(task) ? 'درخواست تأیید تکمیل' : 'انجام شد' }}
+                </DropdownMenuItem>
+                <DropdownMenuItem @select="archiveOne(task.id)">
+                  <Icon name="lucide:archive" class="size-4" /> بایگانی
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div v-if="!projectDetailTasks.length" class="px-5 py-16 text-center">
@@ -629,55 +771,111 @@
       <div class="overflow-hidden rounded-xl border border-border/80 bg-card">
         <div class="flex flex-col gap-3 border-b border-border/80 bg-muted/30 p-4 md:flex-row md:items-center md:justify-between">
           <div class="flex items-center gap-3">
-            <div class="flex size-8 items-center justify-center rounded-md bg-primary/15 text-primary">
+            <div class="flex size-9 items-center justify-center rounded-md bg-primary/15 text-primary">
               <Icon
-                name="lucide:folder-kanban"
-                class="size-4"
+                name="lucide:building-2"
+                class="size-5"
               />
             </div>
-            <h2 class="text-2xl font-semibold text-foreground">
-              کارتابل واحد
-            </h2>
+            <div>
+              <h2 class="text-2xl font-semibold text-foreground">
+                کارتابل واحد
+              </h2>
+              <p class="text-xs text-muted-foreground">
+                {{ visibleProjects.length }} واحد · {{ prefs.favorites.value.length }} مورد در علاقه‌مندی‌ها
+              </p>
+            </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <div
+              v-if="projectSearchOpen"
+              class="relative"
+            >
+              <Icon
+                name="lucide:search"
+                class="absolute right-3 top-3 size-4 text-muted-foreground"
+              />
+              <Input
+                v-model="projectQuery"
+                dir="rtl"
+                class="h-10 w-56 pr-9 text-right"
+                placeholder="جستجوی نام یا کد واحد..."
+                autofocus
+              />
+            </div>
             <Button
               variant="outline"
               size="icon"
               class="h-10 w-10 rounded-md"
+              :class="projectSearchOpen && 'border-primary text-primary'"
               aria-label="جستجوی کارتابل واحد"
+              title="جستجو"
+              @click="toggleProjectSearch"
             >
               <Icon
-                name="lucide:search"
+                :name="projectSearchOpen ? 'lucide:x' : 'lucide:search'"
                 class="size-4"
               />
             </Button>
 
-            <Button
-              variant="outline"
-              class="h-10 rounded-md px-3 text-sm"
-            >
-              <span class="flex items-center gap-2">
-                <Icon
-                  name="lucide:calendar-range"
-                  class="size-4"
-                />
-                تاریخ ایجاد
-              </span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button
+                  variant="outline"
+                  class="h-10 rounded-md px-3 text-sm"
+                >
+                  <span class="flex items-center gap-2">
+                    <Icon
+                      name="lucide:arrow-up-down"
+                      class="size-4"
+                    />
+                    {{ PROJECT_SORT_LABELS[projectSort] }}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  v-for="(label, key) in PROJECT_SORT_LABELS"
+                  :key="key"
+                  @select="projectSort = key"
+                >
+                  {{ label }}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            <Button
-              variant="outline"
-              class="h-10 rounded-md px-3 text-sm"
-            >
-              <span class="flex items-center gap-2">
-                <Icon
-                  name="lucide:sliders-horizontal"
-                  class="size-4"
-                />
-                فیلترها
-              </span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button
+                  variant="outline"
+                  class="h-10 rounded-md px-3 text-sm"
+                  :class="(onlyFavorites || onlyWithTasks) && 'border-primary text-primary'"
+                >
+                  <span class="flex items-center gap-2">
+                    <Icon
+                      name="lucide:sliders-horizontal"
+                      class="size-4"
+                    />
+                    فیلترها
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuCheckboxItem
+                  :model-value="onlyFavorites"
+                  @update:model-value="onlyFavorites = !!$event"
+                >
+                  فقط علاقه‌مندی‌ها
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  :model-value="onlyWithTasks"
+                  @update:model-value="onlyWithTasks = !!$event"
+                >
+                  فقط واحدهای دارای امور محوله
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Dialog v-model:open="projectDialogOpen">
               <DialogTrigger as-child>
@@ -771,10 +969,10 @@
 
         <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,19rem),1fr))] gap-4 p-3 sm:p-4">
           <NuxtLink
-            v-for="project in store.projects"
+            v-for="project in visibleProjects"
             :key="project.id"
             :to="`/tasks/project/${project.id}`"
-            class="block min-w-0 overflow-hidden rounded-xl border border-border/80 bg-background"
+            class="group block min-w-0 overflow-hidden rounded-xl border border-border/80 bg-background transition-shadow hover:shadow-md"
           >
             <div
               :class="[
@@ -783,9 +981,16 @@
               ]"
             >
               <div class="mt-2 flex min-w-0 items-center gap-4 text-white">
-                <div class="flex size-11 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/10 backdrop-blur-sm">
+                <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10 backdrop-blur-sm">
+                  <img
+                    v-if="prefs.logos.value[project.id]"
+                    :src="prefs.logos.value[project.id]"
+                    alt=""
+                    class="size-full object-cover"
+                  >
                   <Icon
-                    name="lucide:house"
+                    v-else
+                    name="lucide:building-2"
                     class="size-5"
                   />
                 </div>
@@ -799,13 +1004,20 @@
                 </div>
               </div>
 
+              <!-- star: add / remove from favourites (pinned first); never opens the card -->
               <button
                 type="button"
-                class="flex size-9 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white/90 transition hover:bg-white/15"
+                class="flex size-9 shrink-0 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white/90 transition hover:bg-white/20"
+                :class="prefs.isFavorite(project.id) && 'bg-white/25'"
+                :aria-pressed="prefs.isFavorite(project.id)"
+                :aria-label="prefs.isFavorite(project.id) ? 'حذف از علاقه‌مندی‌ها' : 'افزودن به علاقه‌مندی‌ها'"
+                :title="prefs.isFavorite(project.id) ? 'حذف از علاقه‌مندی‌ها' : 'افزودن به علاقه‌مندی‌ها'"
+                @click.prevent.stop="toggleProjectFavorite(project)"
               >
                 <Icon
                   name="lucide:star"
                   class="size-4"
+                  :class="prefs.isFavorite(project.id) && 'fill-yellow-300 text-yellow-300'"
                 />
               </button>
             </div>
@@ -818,6 +1030,9 @@
               <button
                 type="button"
                 class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/70 hover:text-foreground"
+                aria-label="تنظیمات کارتابل واحد"
+                title="تنظیمات"
+                @click.prevent.stop="openProjectSettings(project)"
               >
                 <Icon
                   name="lucide:settings"
@@ -826,21 +1041,122 @@
               </button>
             </div>
 
-            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border/80 bg-muted/30 px-4 py-3">
-              <div class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                <span class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {{ getProjectInitial(project.name) }}
-                </span>
-                <span class="min-w-0 truncate">{{ getUserName(project.leadId) }}</span>
-              </div>
-
-              <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                <span class="whitespace-nowrap">{{ getProjectTaskCount(project.id) }} مورد</span>
-              </div>
+            <div class="flex items-center justify-between gap-3 border-t border-border/80 bg-muted/30 px-4 py-3">
+              <!-- the department's picture instead of the responsible person's name -->
+              <span class="inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-background">
+                <img
+                  v-if="prefs.logos.value[project.id]"
+                  :src="prefs.logos.value[project.id]"
+                  alt=""
+                  class="size-full object-cover"
+                >
+                <Icon
+                  v-else
+                  name="lucide:building-2"
+                  class="size-4 text-muted-foreground"
+                />
+              </span>
+              <span class="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+                <Icon
+                  name="lucide:list-checks"
+                  class="size-3.5"
+                />
+                {{ getProjectTaskCount(project.id) }} مورد
+              </span>
             </div>
           </NuxtLink>
+
+          <div
+            v-if="!visibleProjects.length"
+            class="col-span-full rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground"
+          >
+            واحدی با این فیلتر پیدا نشد.
+          </div>
         </div>
       </div>
+
+      <!-- department settings: picture (logo) + quick actions -->
+      <Dialog v-model:open="settingsOpen">
+        <DialogContent class="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>تنظیمات {{ settingsProject?.name }}</DialogTitle>
+            <DialogDescription>تصویر این واحد روی کارت و کارتابل نمایش داده می‌شود (فقط برای شما).</DialogDescription>
+          </DialogHeader>
+          <div
+            v-if="settingsProject"
+            class="space-y-4"
+          >
+            <div class="flex items-center gap-4">
+              <span class="inline-flex size-16 items-center justify-center overflow-hidden rounded-full border bg-muted/40">
+                <img
+                  v-if="prefs.logos.value[settingsProject.id]"
+                  :src="prefs.logos.value[settingsProject.id]"
+                  alt=""
+                  class="size-full object-cover"
+                >
+                <Icon
+                  v-else
+                  name="lucide:building-2"
+                  class="size-7 text-muted-foreground"
+                />
+              </span>
+              <div class="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="gap-2"
+                  @click="logoInput?.click()"
+                >
+                  <Icon
+                    name="lucide:image-up"
+                    class="size-4"
+                  /> انتخاب تصویر
+                </Button>
+                <Button
+                  v-if="prefs.logos.value[settingsProject.id]"
+                  variant="ghost"
+                  size="sm"
+                  @click="prefs.removeLogo(settingsProject.id)"
+                >
+                  حذف تصویر
+                </Button>
+              </div>
+              <input
+                ref="logoInput"
+                type="file"
+                accept="image/*"
+                class="hidden"
+                @change="onLogoPicked"
+              >
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Button
+                class="gap-2"
+                as-child
+              >
+                <NuxtLink :to="`/tasks/project/${settingsProject.id}`">
+                  <Icon
+                    name="lucide:arrow-left-circle"
+                    class="size-4"
+                  /> ورود به کارتابل
+                </NuxtLink>
+              </Button>
+              <Button
+                variant="outline"
+                class="gap-2"
+                @click="toggleProjectFavorite(settingsProject)"
+              >
+                <Icon
+                  name="lucide:star"
+                  class="size-4"
+                  :class="prefs.isFavorite(settingsProject.id) && 'fill-yellow-400 text-yellow-400'"
+                />
+                {{ prefs.isFavorite(settingsProject.id) ? 'حذف از علاقه‌مندی‌ها' : 'افزودن به علاقه‌مندی‌ها' }}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
 
     <section
@@ -932,7 +1248,7 @@
             </div>
             <div class="space-y-3">
               <div
-                v-for="task in boardTasks[column]"
+                v-for="task in visibleBoard(column)"
                 :key="task.id"
                 class="min-w-0 cursor-pointer overflow-hidden rounded-xl border bg-background p-3 shadow-sm transition-colors hover:border-primary/50 hover:bg-muted/20"
                 @click="openTask(task.id, task.projectId)"
@@ -954,6 +1270,20 @@
                   <span class="whitespace-nowrap">{{ fmtDue(task) }}</span>
                 </div>
               </div>
+              <Button
+                v-if="(boardTasks[column]?.length || 0) > BOARD_LIMIT"
+                variant="ghost"
+                size="sm"
+                class="w-full justify-center gap-1 text-xs text-muted-foreground"
+                @click="toggleColumn(column)"
+              >
+                <Icon
+                  :name="expandedColumns.has(column) ? 'lucide:chevron-up' : 'lucide:chevron-down'"
+                  class="size-3.5"
+                />
+                {{ expandedColumns.has(column) ? 'نمایش کمتر' : `بیشتر (${(boardTasks[column]?.length || 0) - BOARD_LIMIT} مورد دیگر)` }}
+              </Button>
+
               <div
                 v-if="!boardTasks[column]?.length"
                 class="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground"
@@ -1066,6 +1396,15 @@
                       <span class="mr-1 inline-block size-2 rounded-full bg-success" />
                       {{ task.title }}
                     </div>
+                    <div
+                      v-for="task in day.upcoming"
+                      :key="`${task.id}-${day.date}`"
+                      class="truncate rounded-md border border-dashed border-primary/50 bg-primary/5 px-2 py-1 text-xs text-foreground"
+                      :title="`${task.title} (تکرار آینده)`"
+                    >
+                      <Icon name="lucide:repeat" class="mr-1 inline-block size-3 text-primary" />
+                      {{ task.title }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1079,66 +1418,15 @@
       v-else-if="section === 'analytics'"
       class="space-y-6"
     >
-      <div class="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
-        <Card class="gap-4 p-4 shadow-none">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold">
-              گزارش امور محوله
-            </h2>
-            <Button
-              variant="outline"
-              @click="exportReport"
-            >
-              خروجی گزارش
-            </Button>
-          </div>
-
-          <div class="grid gap-4 md:grid-cols-3">
-            <div class="rounded-xl border bg-muted/20 p-4">
-              <p class="text-sm text-muted-foreground">
-                انجام‌شده
-              </p>
-              <p class="mt-2 text-2xl font-semibold">
-                {{ completedTasks }}
-              </p>
-            </div>
-            <div class="rounded-xl border bg-muted/20 p-4">
-              <p class="text-sm text-muted-foreground">
-                در معرض تأخیر
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-warning">
-                {{ atRiskTasks }}
-              </p>
-            </div>
-            <div class="rounded-xl border bg-muted/20 p-4">
-              <p class="text-sm text-muted-foreground">
-                سرعت انجام
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-primary">
-                {{ velocity }}%
-              </p>
-            </div>
-          </div>
-        </Card>
-
-        <Card class="gap-4 p-4 shadow-none">
-          <h3 class="text-base font-semibold">
-            خلاصه‌ی واحدها
-          </h3>
-          <div class="space-y-3">
-            <div
-              v-for="item in departmentSummary"
-              :key="item.label"
-              class="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm"
-            >
-              <span>{{ item.label }}</span>
-              <Badge variant="secondary">
-                {{ item.value }}
-              </Badge>
-            </div>
-          </div>
-        </Card>
-      </div>
+      <TaskKpiPanel
+        :tasks="store.tasks"
+        :users="store.users"
+        :projects="store.projects"
+        :assignee-names="getAssigneeNames"
+        :status-label="columnLabel"
+        :due-text="fmtDue"
+        @export-excel="exportReport"
+      />
     </section>
 
     <section
@@ -1236,7 +1524,11 @@
 <script setup lang="ts">
 const notify = useNotify()
 import TaskPriorityBadge from '~/components/tasks/TaskPriorityBadge.vue'
+import TaskProductivityChart from '~/components/tasks/TaskProductivityChart.vue'
+import TaskKpiPanel from '~/components/tasks/TaskKpiPanel.vue'
 import TaskStatusBadge from '~/components/tasks/TaskStatusBadge.vue'
+import { projectOccurrences } from '~/utils/recurrence'
+import { formatHours, kpiFor, monthlyCreatedVsCompleted, tehranDay } from '~/utils/taskKpi'
 import {
   useTaskWorkspaceStore,
   type RecurrenceRule,
@@ -1395,6 +1687,37 @@ const workloadStats = computed<Array<{ name: string, count: number, width: numbe
   })
 })
 
+/* ── board tiles: only a few cards per column, the rest behind «بیشتر» ── */
+const BOARD_LIMIT = 4
+const expandedColumns = ref<Set<string>>(new Set())
+const visibleBoard = (column: string): TaskEntity[] => {
+  const list = boardTasks.value[column] ?? []
+  return expandedColumns.value.has(column) ? list : list.slice(0, BOARD_LIMIT)
+}
+const toggleColumn = (column: string) => {
+  const next = new Set(expandedColumns.value)
+  if (next.has(column)) next.delete(column)
+  else next.add(column)
+  expandedColumns.value = next
+}
+
+/* ── Monthly Productivity Overview (dashboard) ── */
+const monthlyPoints = computed(() => monthlyCreatedVsCompleted(store.tasks, 6))
+const currentMonthLabel = computed(() => monthlyPoints.value[monthlyPoints.value.length - 1]?.label ?? '')
+const memberMonthActivity = computed(() => {
+  const now = isoToJalali(todayIso())!
+  const rows = store.users.map((user: { id: string, name: string }) => {
+    const mine = store.tasks.filter((t: TaskEntity) => t.assigneeIds.includes(user.id) && !t.isDraft && !t.isArchived)
+    const doneThisMonth = mine.filter((t: TaskEntity) => {
+      const j = t.status === 'done' ? isoToJalali(tehranDay(t.completedAt)) : null
+      return j && j.jy === now.jy && j.jm === now.jm
+    }).length
+    return { name: user.name, completed: doneThisMonth, assigned: mine.length }
+  }).filter(r => r.assigned > 0).sort((a, b) => b.completed - a.completed).slice(0, 6)
+  const max = Math.max(1, ...rows.map(r => r.assigned))
+  return rows.map(r => ({ ...r, width: Math.max(r.completed ? 6 : 0, (r.completed / max) * 100) }))
+})
+
 const prioritySummary = computed<Array<{ label: string, key: string, dotClass: string, count: number }>>(() => {
   const summary = [
     { label: 'فوری', key: 'urgent', dotClass: 'bg-destructive' },
@@ -1418,6 +1741,55 @@ const getAssigneeNames = (task: TaskEntity) =>
   task.assigneeIds.length ? task.assigneeIds.map(id => getUserName(id)).join('، ') : 'بدون مسئول'
 /** due date in Jalali (+ time, Tehran) */
 const fmtDue = (task: TaskEntity) => formatDueDateTime(task.dueDate, task.dueTime) || 'بدون موعد'
+/* ── department worklists: favourites (star), search / sort / filter, logo ── */
+const prefs = useProjectPrefs()
+const projectSearchOpen = ref(false)
+const projectQuery = ref('')
+const PROJECT_SORT_LABELS = { name: 'نام واحد', tasks: 'بیشترین امور محوله', newest: 'جدیدترین' } as const
+const projectSort = ref<keyof typeof PROJECT_SORT_LABELS>('name')
+const onlyFavorites = ref(false)
+const onlyWithTasks = ref(false)
+const toggleProjectSearch = () => {
+  projectSearchOpen.value = !projectSearchOpen.value
+  if (!projectSearchOpen.value) projectQuery.value = ''
+}
+const visibleProjects = computed(() => {
+  const q = projectQuery.value.trim().toLowerCase()
+  let list = store.projects.filter(p =>
+    (!q || `${p.name} ${p.code} ${p.description}`.toLowerCase().includes(q))
+    && (!onlyFavorites.value || prefs.isFavorite(p.id))
+    && (!onlyWithTasks.value || getProjectTaskCount(p.id) > 0))
+  list = [...list].sort((a, b) =>
+    projectSort.value === 'tasks' ? getProjectTaskCount(b.id) - getProjectTaskCount(a.id)
+      : projectSort.value === 'newest' ? Number(b.id) - Number(a.id)
+        : a.name.localeCompare(b.name, 'fa'))
+  // starred departments are pinned to the top
+  return [...list.filter(p => prefs.isFavorite(p.id)), ...list.filter(p => !prefs.isFavorite(p.id))]
+})
+const toggleProjectFavorite = (project: { id: string, name: string }) => {
+  const adding = !prefs.isFavorite(project.id)
+  prefs.toggleFavorite(project.id)
+  notify.success(adding ? `«${project.name}» به علاقه‌مندی‌ها اضافه شد` : `«${project.name}» از علاقه‌مندی‌ها حذف شد`)
+}
+const settingsOpen = ref(false)
+const settingsProject = ref<{ id: string, name: string } | null>(null)
+const logoInput = ref<HTMLInputElement | null>(null)
+const openProjectSettings = (project: { id: string, name: string }) => {
+  settingsProject.value = project
+  settingsOpen.value = true
+}
+async function onLogoPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !settingsProject.value) return
+  try {
+    await prefs.setLogo(settingsProject.value.id, file)
+  }
+  catch {
+    notify.error('این تصویر خوانده نشد؛ فایل دیگری انتخاب کنید.')
+  }
+}
 const getProjectTaskCount = (projectId: string) => store.tasks.filter((task: TaskEntity) => task.projectId === projectId).length
 const openTask = (taskId: string, taskProjectId?: string) => navigateTo(`/tasks/project/${taskProjectId || props.projectId || store.tasks.find(task => task.id === taskId)?.projectId}/task/${taskId}`)
 
@@ -1506,6 +1878,118 @@ const requestApproval = async (task: TaskEntity) => {
   catch (err) {
     notify.error(taskErrorMessage(err, 'ثبت درخواست تأیید تکمیل انجام نشد'))
   }
+}
+
+/* ── department detail: view switch, selection (bulk), per-task menu, CSV import ── */
+const projectView = ref<'list' | 'board'>('list')
+const projectBoard = computed<Record<string, TaskEntity[]>>(() => {
+  const map: Record<string, TaskEntity[]> = { 'todo': [], 'in-progress': [], 'review': [], 'done': [] }
+  for (const t of projectDetailTasks.value) (map[t.status] ??= []).push(t)
+  return map
+})
+const selectedIds = ref<Set<string>>(new Set())
+const toggleSelected = (id: string) => {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+const archiveOne = async (taskId: string) => {
+  const task = store.tasks.find((t: TaskEntity) => t.id === taskId)
+  try {
+    await store.updateTask(taskId, { isArchived: true })
+    notify.success(`«${task?.title ?? ''}» بایگانی شد`)
+  }
+  catch (err) {
+    notify.error(taskErrorMessage(err, 'بایگانی انجام نشد'))
+  }
+}
+const bulkDone = async () => {
+  for (const id of selectedIds.value) await markDone(id)
+  selectedIds.value = new Set()
+}
+const bulkArchive = async () => {
+  for (const id of selectedIds.value) await archiveOne(id)
+  selectedIds.value = new Set()
+}
+
+const csvInput = ref<HTMLInputElement | null>(null)
+/** minimal CSV reader (quotes, commas inside quotes, CRLF) */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++ }
+      else if (ch === '"') quoted = false
+      else cell += ch
+    }
+    else if (ch === '"') quoted = true
+    else if (ch === ',') { row.push(cell); cell = '' }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(cell); cell = ''
+      if (row.some(c => c.trim())) rows.push(row)
+      row = []
+    }
+    else cell += ch
+  }
+  row.push(cell)
+  if (row.some(c => c.trim())) rows.push(row)
+  return rows
+}
+const PRIORITY_FROM_FA: Record<string, string> = { 'کم': 'low', 'متوسط': 'medium', 'زیاد': 'high', 'فوری': 'urgent', 'low': 'low', 'medium': 'medium', 'high': 'high', 'urgent': 'urgent' }
+async function onCsvPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !props.projectId) return
+  const rows = parseCsv((await file.text()).replace(/^\ufeff/, ''))
+  const [head, ...body] = rows
+  if (!head || !body.length) {
+    notify.error('فایل CSV خالی است', 'ستون‌ها: عنوان، توضیحات، اولویت، موعد')
+    return
+  }
+  const col = (names: string[]) => head.findIndex(h => names.includes(h.trim().toLowerCase()))
+  const iTitle = col(['عنوان', 'title'])
+  const iDesc = col(['توضیحات', 'description'])
+  const iPri = col(['اولویت', 'priority'])
+  const iDue = col(['موعد', 'due', 'due_date'])
+  if (iTitle < 0) {
+    notify.error('ستون «عنوان» در فایل پیدا نشد')
+    return
+  }
+  let created = 0
+  let failed = 0
+  for (const r of body) {
+    const title = (r[iTitle] ?? '').trim()
+    if (!title) continue
+    let due = (iDue >= 0 ? r[iDue] ?? '' : '').trim()
+    if (/^1[34]\d{2}[/-]\d{1,2}[/-]\d{1,2}$/.test(due)) {
+      const [jy, jm, jd] = due.split(/[/-]/).map(Number) as [number, number, number]
+      due = jalaliToIso(jy, jm, jd)
+    }
+    try {
+      await store.createTask({
+        title,
+        description: iDesc >= 0 ? (r[iDesc] ?? '').trim() : '',
+        priority: (PRIORITY_FROM_FA[(iPri >= 0 ? r[iPri] ?? '' : '').trim().toLowerCase()] ?? 'medium') as TaskPriority,
+        dueDate: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : '',
+        assigneeId: store.meId,
+        assigneeIds: [store.meId],
+        projectId: props.projectId,
+      } as never)
+      created++
+    }
+    catch {
+      failed++
+    }
+  }
+  if (created) notify.success(`${created} امور محوله وارد شد`, failed ? `${failed} ردیف وارد نشد` : undefined)
+  else notify.error('هیچ ردیفی وارد نشد')
 }
 
 const advanceTask = async (taskId: string) => {
@@ -1682,8 +2166,21 @@ const calendarDays = computed(() => {
   const len = jalaliMonthLength(jy, jm)
   const first = jalaliWeekday(jy, jm, 1) // 0 = Saturday
   const today = todayIso()
-  const days: { date: string, dayNumber: string, isCurrentMonth: boolean, isToday: boolean, tasks: TaskEntity[] }[] = []
+  const days: { date: string, dayNumber: string, isCurrentMonth: boolean, isToday: boolean, tasks: TaskEntity[], upcoming: TaskEntity[] }[] = []
   const rows = Math.ceil((first + len) / 7)
+  // Future repeats of recurring tasks: the server only creates a copy when its day arrives, so every
+  // later occurrence is projected here for the whole visible range (any month, any distance ahead).
+  const gStart = toGregorian(jy, jm, 1)
+  const rangeFrom = new Date(Date.UTC(gStart.gy, gStart.gm - 1, gStart.gd - first)).toISOString().slice(0, 10)
+  const rangeTo = new Date(Date.UTC(gStart.gy, gStart.gm - 1, gStart.gd - first + rows * 7 - 1)).toISOString().slice(0, 10)
+  const upcomingByDate = new Map<string, TaskEntity[]>()
+  for (const t of sectionTasks.value as TaskEntity[]) {
+    if (!t.recurrence || t.recurrenceSourceId || t.isDraft || t.isArchived || !t.dueDate) continue
+    for (const d of projectOccurrences(t, rangeFrom, rangeTo)) {
+      if (!upcomingByDate.has(d)) upcomingByDate.set(d, [])
+      upcomingByDate.get(d)!.push(t)
+    }
+  }
   for (let index = 0; index < rows * 7; index += 1) {
     const offset = index - first + 1 // day-of-month, may fall outside this month
     const weekday = index % 7
@@ -1699,6 +2196,7 @@ const calendarDays = computed(() => {
       isCurrentMonth: j.jy === jy && j.jm === jm,
       isToday: iso === today,
       tasks: sectionTasks.value.filter((task: TaskEntity) => task.dueDate === iso),
+      upcoming: upcomingByDate.get(iso) ?? [],
     })
   }
   return days

@@ -26,6 +26,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.creator_snapshot import display_name as _creator_display, register as _register_creator
 from app.core.base import ActiveFlagMixin, BigIntUnsigned, SoftDeleteMixin, TimestampMixin
 from app.extensions import db
 
@@ -79,6 +80,9 @@ class LogisticsApplicant(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Mo
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # The creator's name as TEXT, written once when the record is created (never a live join): it stays
+    # correct when the account is renamed, re-assigned, moved or removed. See core/creator_snapshot.py.
+    creator_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     reviewed_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -103,7 +107,7 @@ class LogisticsApplicant(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Mo
 
     @property
     def created_by_name(self) -> str | None:
-        return self.created_by.full_name if self.created_by is not None else None
+        return _creator_display(self)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<LogisticsApplicant id={self.id} type={self.applicant_type} name={self.display_name!r}>"
@@ -204,3 +208,6 @@ class LogisticsFile(TimestampMixin, db.Model):
     uploaded_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+
+
+_register_creator(LogisticsApplicant)

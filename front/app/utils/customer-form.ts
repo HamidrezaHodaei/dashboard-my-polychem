@@ -144,6 +144,7 @@ export interface CustomerFormState {
   company_name: string
   company_national_id: string
   registration_number: string
+  company_phone: string // تلفن شرکت (legal only; separate from the contact persons' numbers)
   economic_id: string
   activity_start_date: string
   first_name: string
@@ -163,6 +164,7 @@ export interface CustomerFormState {
   produced_products: ProducedForm[]
   production_lines_count: string // تعداد خطوط تولید (typed by hand)
   production_line_names: string[] // free list of production line names (add / remove by hand)
+  production_line_counts: string[] // units of each line, parallel to production_line_names; the total is their sum
   factory_province: string
   factory_city: string
   factory_location: string
@@ -213,7 +215,7 @@ export const blankLog = (): ContactLogForm => ({ date: '', note: '' })
 export function blankCustomerForm(): CustomerFormState {
   return {
     customer_type: 'LEGAL',
-    company_name: '', company_national_id: '', registration_number: '', economic_id: '', activity_start_date: '',
+    company_name: '', company_national_id: '', registration_number: '', company_phone: '', economic_id: '', activity_start_date: '',
     first_name: '', last_name: '', national_id: '', brand_name: '',
     contacts: [blankContact()],
     head_office_address: '', head_office_postal_code: '', factory_address: '', factory_postal_code: '',
@@ -221,6 +223,7 @@ export function blankCustomerForm(): CustomerFormState {
     industries: [blankIndustry()], activity_types: [], produced_products: [],
     production_lines_count: '',
     production_line_names: [],
+    production_line_counts: [],
     factory_province: '', factory_city: '', factory_location: '', latitude: '', longitude: '',
     consumed_products: [blankConsumed()], current_suppliers: [],
     commercial_status: 'NO_ACTION', operational_status: 'ACTIVE', contact_log: [],
@@ -254,6 +257,16 @@ function positionToForm(v: string): Pick<CustomerContactForm, 'position_choice' 
 
 export const MAX_PRODUCTION_LINES = 200
 
+/** named production lines with their unit counts (blank names dropped; a blank count means 1) */
+export function productionLines(f: Pick<CustomerFormState, 'production_line_names' | 'production_line_counts'>) {
+  return f.production_line_names
+    .map((n, i) => ({ name: n.trim(), count: parseWhole((f.production_line_counts[i] ?? '').trim() || '1') ?? 1 }))
+    .filter(l => l.name)
+}
+/** تعداد کل خطوط تولید = sum of the per-line counts */
+export const totalProductionLines = (f: Pick<CustomerFormState, 'production_line_names' | 'production_line_counts'>) =>
+  productionLines(f).reduce((sum, l) => sum + (Number.isFinite(l.count) ? l.count : 0), 0)
+
 /** API customer -> editable form state. */
 export function customerToForm(c: Customer): CustomerFormState {
   // Older records may still carry free-text acquaintance sources: show them as "Other".
@@ -269,7 +282,7 @@ export function customerToForm(c: Customer): CustomerFormState {
     ...blankCustomerForm(),
     customer_type: c.customer_type,
     company_name: str(c.company_name), company_national_id: str(c.company_national_id),
-    registration_number: str(c.registration_number), economic_id: str(c.economic_id),
+    registration_number: str(c.registration_number), company_phone: str(c.company_phone), economic_id: str(c.economic_id),
     activity_start_date: str(c.activity_start_date),
     first_name: str(c.first_name), last_name: str(c.last_name), national_id: str(c.national_id),
     brand_name: str(c.brand_name),
@@ -290,6 +303,7 @@ export function customerToForm(c: Customer): CustomerFormState {
     })),
     production_lines_count: numStr(c.production_lines_count),
     production_line_names: Array.isArray(c.production_line_names) ? c.production_line_names.map(str) : [],
+    production_line_counts: (Array.isArray(c.production_line_names) ? c.production_line_names : []).map((_, i) => numStr(c.production_line_counts?.[i] ?? 1)),
     factory_province: str(c.factory_province), factory_city: str(c.factory_city),
     factory_location: str(c.factory_location), latitude: numStr(c.latitude), longitude: numStr(c.longitude),
     consumed_products: c.consumed_products?.length
@@ -360,6 +374,7 @@ export function formToPayload(f: CustomerFormState) {
     company_name: legal ? nullIfBlank(f.company_name) : null,
     company_national_id: legal ? digitsOrNull(f.company_national_id) : null,
     registration_number: legal ? digitsOrNull(f.registration_number) : null,
+    company_phone: legal ? nullIfBlank(f.company_phone) : null,
     economic_id: legal ? digitsOrNull(f.economic_id) : null,
     activity_start_date: legal ? f.activity_start_date || null : null,
     first_name: legal ? null : nullIfBlank(f.first_name),
@@ -390,9 +405,10 @@ export function formToPayload(f: CustomerFormState) {
     produced_products: f.produced_products.filter(p => p.name.trim()).map(p => ({
       name: p.name.trim(), amount: parseWhole(p.amount), unit: p.unit,
     })),
-    // تعداد خطوط تولید is typed by hand; when left empty it falls back to the number of named lines
-    production_lines_count: parseWhole(f.production_lines_count) ?? (f.production_line_names.filter(n => n.trim()).length || null),
-    production_line_names: f.production_line_names.map(n => n.trim()).filter(Boolean),
+    // every named line carries its own unit count; the total (تعداد کل خطوط) is their sum
+    production_lines_count: productionLines(f).length ? totalProductionLines(f) : null,
+    production_line_names: productionLines(f).map(l => l.name),
+    production_line_counts: productionLines(f).map(l => l.count),
     factory_province: nullIfBlank(f.factory_province),
     factory_city: nullIfBlank(f.factory_city),
     factory_location: nullIfBlank(f.factory_location),
@@ -503,10 +519,13 @@ export function validateCustomerStep(step: number, f: CustomerFormState): StepEr
     if (!f.activity_types.length) e.activity_types = 'حداقل یک نوع فعالیت را انتخاب کنید.'
     if (!f.factory_province.trim()) e.factory_province = 'انتخاب استان الزامی است.'
     if (!f.factory_city.trim()) e.factory_city = 'وارد کردن شهر الزامی است.'
-    if (f.production_lines_count.trim()) {
-      const n = parseWhole(f.production_lines_count)
-      if (n === null || n === undefined || Number.isNaN(n) || n < 0) e.production_lines_count = 'تعداد خطوط تولید باید یک عدد صحیح و نامنفی باشد.'
-    }
+    f.production_line_names.forEach((name, i) => {
+      const raw = (f.production_line_counts[i] ?? '').trim()
+      if (!name.trim()) return
+      const n = raw ? parseWhole(raw) : 1
+      if (n === null || n === undefined || Number.isNaN(n) || n < 0) e[`production_line.${i}.count`] = 'تعداد باید عدد صحیح و نامنفی باشد.'
+    })
+    if (f.company_phone.trim() && f.company_phone.replace(/\D/g, '').length < 5) e.company_phone = 'شماره تلفن شرکت معتبر نیست.'
     if (f.production_line_names.filter(n => n.trim()).length > MAX_PRODUCTION_LINES) {
       e.production_line_names = `حداکثر ${MAX_PRODUCTION_LINES} خط تولید قابل ثبت است.`
     }

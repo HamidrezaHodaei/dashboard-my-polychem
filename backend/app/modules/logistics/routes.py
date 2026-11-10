@@ -21,10 +21,13 @@ STAFF (JWT + per-type permission, see services.py):
 from flask import Blueprint, g, request, send_file
 
 from app.core.auth.decorators import require_authenticated
+from app.core.export_files import collect_pages, send_export
+from app.modules import export_rows
 from app.extensions import limiter
 from app.modules.logistics import files, services
 from app.modules.logistics.schemas import ChangeRequestIn, ReviewIn, UpdateIn, ValidateStepIn, serialize_applicant
 from app.modules.logistics.wizard import WIZARD
+from app.permissions.service import has_permission
 from app.utils.pagination import parse_pagination
 from app.utils.responses import success_response
 
@@ -81,18 +84,44 @@ def public_register():
 
 
 # ── staff ────────────────────────────────────────────────────────────
-@bp.get("/applicants")
-@require_authenticated
-def list_applicants():
-    page, per_page = parse_pagination(request.args)
+def _list_kwargs() -> dict:
     a = request.args
-    items, total = services.list_applicants(
-        g.current_user, page=page, per_page=per_page,
+    return dict(
         applicant_type=a.get("applicant_type", ""), search=a.get("search", ""), status=a.get("status", ""),
         province=a.get("province", ""), area_type=a.get("area_type", ""),
         vehicle_type=a.get("vehicle_type", ""), body_type=a.get("body_type", ""),
         include_inactive=a.get("include_inactive", "").lower() == "true",
     )
+
+
+@bp.get("/export")
+@require_authenticated
+def export_applicants():
+    """Excel / Word of the registrations matching the filters -- only of the types the caller may export
+    (`logistics.company.export` / `logistics.driver.export`)."""
+    kwargs = _list_kwargs()
+    allowed = [
+        t for t, res in (("COMPANY", "company"), ("DRIVER", "driver"))
+        if has_permission(g.current_user, f"logistics.{res}.export", None, None)
+    ]
+    if not allowed:
+        export_rows.require_export(g.current_user, "logistics.company.export")  # raises the 403
+    wanted = kwargs["applicant_type"]
+    if wanted and wanted not in allowed:
+        export_rows.require_export(g.current_user, f"logistics.{'company' if wanted == 'COMPANY' else 'driver'}.export")
+    items = []
+    for t in ([wanted] if wanted else allowed):
+        sub = {**kwargs, "applicant_type": t}
+        items += collect_pages(lambda p, n, sub=sub: services.list_applicants(g.current_user, page=p, per_page=n, **sub))
+    title, headers, rows = export_rows.logistics_table(items)
+    return send_export(request.args.get("format", "xlsx"), title=title, filename="logistics", headers=headers, rows=rows)
+
+
+@bp.get("/applicants")
+@require_authenticated
+def list_applicants():
+    page, per_page = parse_pagination(request.args)
+    items, total = services.list_applicants(g.current_user, page=page, per_page=per_page, **_list_kwargs())
     return success_response(
         data=[_with_flags(i, detail=False) for i in items],
         meta={"page": page, "per_page": per_page, "total": total},

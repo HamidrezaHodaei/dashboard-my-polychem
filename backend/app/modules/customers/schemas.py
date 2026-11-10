@@ -215,6 +215,7 @@ class CustomerFields(_Strip):
     company_name: str | None = Field(default=None, max_length=255)
     company_national_id: str | None = None
     registration_number: str | None = Field(default=None, max_length=50)
+    company_phone: str | None = Field(default=None, max_length=30)
     economic_id: str | None = Field(default=None, max_length=20)
     activity_start_date: dt.date | None = None
     contacts: list[CustomerContact] | None = None
@@ -233,6 +234,7 @@ class CustomerFields(_Strip):
     produced_products: list[ProducedProduct] | None = None
     production_lines_count: int | None = Field(default=None, ge=0, le=100000)
     production_line_names: list[str] | None = None  # free list: as many lines as the user adds
+    production_line_counts: list[int] | None = None  # units per line, parallel to production_line_names
     # production_capacity is NOT an input: services.py derives it from produced_products.
     factory_province: str | None = Field(default=None, max_length=100)
     factory_city: str | None = Field(default=None, max_length=100)
@@ -287,6 +289,28 @@ class CustomerFields(_Strip):
     @classmethod
     def _past(cls, v):
         return _not_future(v, "Date")
+
+    @field_validator("company_phone")
+    @classmethod
+    def _company_phone(cls, v):
+        if v is None:
+            return v
+        v = " ".join(v.split())
+        if not v:
+            return None
+        digits = [c for c in v if c.isdigit()]
+        if len(digits) < 5 or any(not (c.isdigit() or c in "+-() ") for c in v):
+            raise ValueError("Enter a valid company phone number.")
+        return v
+
+    @field_validator("production_line_counts")
+    @classmethod
+    def _line_counts(cls, v):
+        if v is None:
+            return v
+        if len(v) > 200 or any((not isinstance(n, int)) or n < 0 or n > 100000 for n in v):
+            raise ValueError("Each production line count must be a whole number from 0 to 100000.")
+        return v
 
     @field_validator("production_line_names")
     @classmethod
@@ -421,6 +445,7 @@ class CustomerPublic(BaseModel):
     company_name: str | None
     company_national_id: str | None
     registration_number: str | None
+    company_phone: str | None
     economic_id: str | None
     activity_start_date: dt.date | None
     contacts: list[dict]
@@ -437,6 +462,7 @@ class CustomerPublic(BaseModel):
     produced_products: list[dict]
     production_lines_count: int | None
     production_line_names: list[str]
+    production_line_counts: list[int] = []
     production_capacity: float | None  # tons per year (sum of produced_products)
     factory_province: str | None
     factory_city: str | None
@@ -483,7 +509,7 @@ class CustomerPublic(BaseModel):
     created_at: dt.datetime
     updated_at: dt.datetime
 
-    @field_validator("production_line_names", mode="before")
+    @field_validator("production_line_names", "production_line_counts", mode="before")
     @classmethod
     def _names_default(cls, v):
         return v or []

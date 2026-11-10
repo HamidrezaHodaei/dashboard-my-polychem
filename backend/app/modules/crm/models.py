@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.creator_snapshot import display_name as _creator_display, register as _register_creator
 from app.core.base import ActiveFlagMixin, BigIntUnsigned, SoftDeleteMixin, TimestampMixin
 from app.extensions import db
 
@@ -97,11 +98,18 @@ class CrmSale(TimestampMixin, SoftDeleteMixin, db.Model):
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Who registered the sale, as text fixed at insert time (the exact moment is `created_at`).
+    creator_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
+    created_by = relationship("User", foreign_keys=[created_by_user_id], lazy="select")
     customer = relationship("Customer", lazy="joined")
-    # The customer bank's product pick-list entry (CustomerOptionItem, kind=PRODUCT).
+    # The customer bank's product pick-list entry (CustomerOptionItem, kind=GRADE).
     product = relationship("CustomerOptionItem", lazy="joined")
     payment_method = relationship("CrmPaymentMethod", lazy="joined")
+
+    @property
+    def created_by_name(self) -> str | None:
+        return _creator_display(self)
 
     @property
     def is_return(self) -> bool:
@@ -110,3 +118,6 @@ class CrmSale(TimestampMixin, SoftDeleteMixin, db.Model):
     @property
     def sign(self) -> int:
         return -1 if self.is_return else 1
+
+
+_register_creator(CrmSale)

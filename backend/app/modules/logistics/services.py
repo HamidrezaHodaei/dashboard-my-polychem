@@ -458,7 +458,7 @@ def review_applicant(actor: User, applicant_id: int, payload: ReviewIn, *, ip_ad
     a.change_request_note = a.change_requested_at = None  # the request has been answered
     if a.created_by_user_id and a.created_by_user_id != actor.id and payload.action in workflow.TRANSITIONS:
         title, body = workflow.review_notification(payload.action, a.display_name, payload.note)
-        notifications.notify(a.created_by_user_id, "REVIEW_RESULT", title, body, link="/procurement/logistics")
+        notifications.notify(a.created_by_user_id, "REVIEW_RESULT", title, body, link=f"/procurement/logistics?open={a.id}")
     write_audit_log(
         user_id=actor.id, action=f"review_{payload.action.lower()}", module=MODULE,
         entity_type=f"logistics_{_RESOURCE[a.applicant_type]}", entity_id=a.id,
@@ -486,7 +486,7 @@ def finalize_applicant(actor: User, applicant_id: int, *, ip_address: str | None
     if resubmission and a.reviewed_by_user_id and a.reviewed_by_user_id != actor.id:
         notifications.notify(
             a.reviewed_by_user_id, "REVIEW_RESUBMITTED", "درخواست پس از اصلاح دوباره ثبت شد",
-            f"«{a.display_name}» پس از اعمال اصلاحات دوباره برای بررسی ثبت شد.", link="/procurement/logistics",
+            f"«{a.display_name}» پس از اعمال اصلاحات دوباره برای بررسی ثبت شد.", link=f"/procurement/logistics?open={a.id}",
         )
     db.session.commit()
     return a
@@ -509,7 +509,7 @@ def request_change(actor: User, applicant_id: int, payload: ChangeRequestIn, *, 
         notifications.notify(
             a.reviewed_by_user_id, "CHANGE_REQUEST", "درخواست تغییر اطلاعات",
             f"{actor.full_name} برای «{a.display_name}» درخواست تغییر اطلاعات ثبت کرد: {payload.reason}",
-            link="/procurement/logistics",
+            link=f"/procurement/logistics?open={a.id}",
         )
     db.session.commit()
     return a

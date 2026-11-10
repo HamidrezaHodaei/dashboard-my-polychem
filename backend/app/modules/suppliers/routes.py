@@ -15,6 +15,8 @@ from the public form) -- the response is a file reference
 from flask import Blueprint, g, request, send_file
 
 from app.core.auth.decorators import require_authenticated
+from app.core.export_files import collect_pages, send_export
+from app.modules import export_rows
 from app.extensions import limiter
 from app.modules.suppliers import files, services
 from app.modules.suppliers.schemas import (
@@ -115,22 +117,36 @@ def delete_category(category_id: int):
     return success_response(data={})
 
 
-@bp.get("")
-@require_authenticated
-def list_suppliers():
-    page, per_page = parse_pagination(request.args)
+def _list_kwargs() -> dict:
     args = request.args
-    items, total = services.list_suppliers(
-        g.current_user, page=page, per_page=per_page,
+    return dict(
         search=args.get("search", ""), category=args.get("category", ""),
         subcategory=args.get("subcategory", ""),
         status=args.get("status", ""), quality=args.get("quality", ""),
         supplier_type=args.get("supplier_type", ""),
         include_inactive=args.get("include_inactive", "").lower() == "true",
     )
+
+
+@bp.get("")
+@require_authenticated
+def list_suppliers():
+    page, per_page = parse_pagination(request.args)
+    items, total = services.list_suppliers(g.current_user, page=page, per_page=per_page, **_list_kwargs())
     return success_response(
         data=[_dump(item) for item in items], meta={"page": page, "per_page": per_page, "total": total}
     )
+
+
+@bp.get("/export")
+@require_authenticated
+def export_suppliers():
+    """Excel / Word of the suppliers matching the current filters (`procurement.supplier.export`)."""
+    export_rows.require_export(g.current_user, "procurement.supplier.export")
+    kwargs = _list_kwargs()
+    items = collect_pages(lambda p, n: services.list_suppliers(g.current_user, page=p, per_page=n, **kwargs))
+    title, headers, rows = export_rows.suppliers_table(items)
+    return send_export(request.args.get("format", "xlsx"), title=title, filename="suppliers", headers=headers, rows=rows)
 
 
 @bp.get("/categories")

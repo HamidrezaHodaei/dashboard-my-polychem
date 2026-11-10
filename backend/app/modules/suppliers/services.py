@@ -49,6 +49,10 @@ def _can(actor: User, action: str) -> bool:
 
 
 LINK = "/procurement/suppliers"
+
+
+def _link(supplier) -> str:
+    return f"{LINK}?open={supplier.id}"
 # Staff-evaluation fields: only managers set them, never the creator editing their own request.
 _MANAGER_ONLY_FIELDS = ("status", "quality", "reviewed_by_user_id")
 
@@ -516,7 +520,9 @@ def update_supplier(actor: User, supplier_id: int, payload: SupplierUpdate, *, i
 def finalize_supplier(actor: User, supplier_id: int, *, ip_address: str | None) -> Supplier:
     """ثبت نهایی / ثبت مجدد -- the creator submits the draft, or re-submits after corrections."""
     supplier = _get_or_404(supplier_id)
-    kind = request_ops.finalize(supplier, actor, can_update=_can(actor, "update"), link=LINK)
+    kind = request_ops.finalize(
+        supplier, actor, can_update=_can(actor, "update"), link=_link(supplier), review_key="procurement.supplier.review"
+    )
     write_audit_log(user_id=actor.id, action=kind, module=MODULE, entity_type=ENTITY_TYPE, entity_id=supplier.id,
                     ip_address=ip_address)
     db.session.commit()
@@ -525,7 +531,7 @@ def finalize_supplier(actor: User, supplier_id: int, *, ip_address: str | None) 
 
 def request_supplier_change(actor: User, supplier_id: int, reason: str, *, ip_address: str | None) -> Supplier:
     supplier = _get_or_404(supplier_id)
-    request_ops.request_change(supplier, actor, reason, link=LINK)
+    request_ops.request_change(supplier, actor, reason, link=_link(supplier), review_key="procurement.supplier.review")
     write_audit_log(user_id=actor.id, action="change_request", module=MODULE, entity_type=ENTITY_TYPE,
                     entity_id=supplier.id, ip_address=ip_address)
     db.session.commit()
@@ -535,7 +541,7 @@ def request_supplier_change(actor: User, supplier_id: int, reason: str, *, ip_ad
 def review_supplier(actor: User, supplier_id: int, action: str, note: str | None, *, ip_address: str | None) -> Supplier:
     _require(actor, "review")
     supplier = _get_or_404(supplier_id)
-    previous, new = request_ops.review(supplier, actor, action, note, link=LINK)
+    previous, new = request_ops.review(supplier, actor, action, note, link=_link(supplier))
     write_audit_log(user_id=actor.id, action=f"review_{action.lower()}", module=MODULE, entity_type=ENTITY_TYPE,
                     entity_id=supplier.id, metadata={"from": previous, "to": new}, ip_address=ip_address)
     db.session.commit()

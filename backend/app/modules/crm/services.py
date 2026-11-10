@@ -30,7 +30,7 @@ from app.permissions.exceptions import PermissionDeniedError
 from app.permissions.service import has_permission
 from app.utils.exceptions import ConflictError, InvalidInputError, NotFoundError
 from app.utils.jalali import (
-    add_jalali_months, format_jalali, jalali_month_range, jalali_year_range, parse_date_input, tehran_today,
+    add_jalali_months, format_jalali, jalali_month_range, jalali_year_range, parse_date_input, tehran_today, to_tehran,
     to_jalali,
 )
 
@@ -254,6 +254,13 @@ def _base_query(*entities):
 # ---------------------------------------------------------------------
 # Serialisation
 # ---------------------------------------------------------------------
+def _stamp(dt) -> str | None:
+    if dt is None:
+        return None
+    local = to_tehran(dt)
+    return f"{format_jalali(local.date())} {local:%H:%M}"
+
+
 def dump_sale(s: CrmSale) -> dict:
     return {
         "id": s.id,
@@ -267,7 +274,10 @@ def dump_sale(s: CrmSale) -> dict:
         "date": format_jalali(s.sale_date), "date_iso": s.sale_date.isoformat(),
         "jalali_year": s.jalali_year, "jalali_month": s.jalali_month,
         "description": s.description, "created_by_user_id": s.created_by_user_id,
-        "created_at": s.created_at.isoformat() if s.created_at else None,
+        # who registered the sale (a fixed text, see core/creator_snapshot.py) and exactly when
+        "created_by_name": s.created_by_name,
+        "created_at": to_tehran(s.created_at).isoformat() if s.created_at else None,
+        "created_at_display": _stamp(s.created_at),
     }
 
 

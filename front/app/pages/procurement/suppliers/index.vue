@@ -7,7 +7,16 @@
       description="تأمین‌کنندگان ثبت‌نام‌شده در فرم عمومی را بررسی کنید یا مورد جدیدی اضافه کنید."
       action-label="افزودن تأمین‌کننده"
       @action="openCreate"
-    />
+    >
+    <template #actions>
+      <ExportButtons
+        v-if="store.canExport"
+        :busy="exporting"
+        :disabled="!store.total"
+        @export="runExport"
+      />
+    </template>
+    </AccessPageHeader>
 
     <div class="grid gap-4 sm:grid-cols-4">
       <AccessStat
@@ -441,35 +450,18 @@
         </div>
       </div>
 
-      <div
-        v-if="store.total > store.perPage"
-        class="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"
-      >
-        <span>صفحه {{ store.page }} از {{ pageCount }} &middot; مجموع {{ store.total }} مورد</span>
-        <div class="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            :disabled="store.page <= 1 || store.loading"
-            @click="store.setPage(store.page - 1)"
-          >
-            قبلی
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            :disabled="store.page >= pageCount || store.loading"
-            @click="store.setPage(store.page + 1)"
-          >
-            بعدی
-          </Button>
-        </div>
-      </div>
+      <NumberedPagination
+        :page="store.page"
+        :page-size="store.perPage"
+        :total="store.total"
+        :loading="store.loading"
+        @update:page="store.setPage"
+      />
     </Card>
 
     <!-- View details -->
     <Dialog v-model:open="viewOpen">
-      <DialogContent class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+      <DialogContent class="fixed !inset-0 !left-0 !top-0 !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 flex flex-col gap-0 overflow-hidden !rounded-none border-0 p-0 sm:!max-w-none">
         <DialogHeader class="border-b px-6 py-4 text-right">
           <div class="flex flex-wrap items-center gap-2">
             <DialogTitle
@@ -509,9 +501,10 @@
           :note="viewing.review_note"
           :change-request-note="viewing.change_request_note"
         />
+        <DetailNav :watch-key="viewing?.id" />
         <div
           v-if="viewing"
-          class="flex-1 space-y-7 overflow-y-auto px-6 py-6 text-sm"
+          class="detail-body flex-1 overflow-y-auto bg-muted/20 px-6 py-6 text-sm"
         >
           <section class="space-y-3">
             <h3 class="font-semibold">
@@ -992,7 +985,8 @@
       @submit="submitChangeRequest"
     />
 
-    <SupplierFormWizard
+    <LazySupplierFormWizard
+      v-if="wizardLoaded"
       v-model:open="formOpen"
       :supplier="editing"
       @saved="onSaved"
@@ -1108,7 +1102,26 @@ onBeforeUnmount(() => clearTimeout(timer))
 onMounted(async () => {
   await Promise.all([store.load(), store.loadCategories(), store.loadCategoryItems()])
   appliedKey = filterKey()
+  await openFromQuery()
 })
+
+/* ── a notification points here with ?open=<id>: show that request right away ── */
+const route = useRoute()
+async function openFromQuery() {
+  const raw = Array.isArray(route.query.open) ? route.query.open[0] : route.query.open
+  const id = Number(raw)
+  if (!raw || !Number.isInteger(id) || id < 1) return
+  try {
+    openView(store.suppliers.find(x => x.id === id) ?? await store.fetchOne(id))
+  }
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'این پرونده پیدا نشد یا اجازهٔ دیدن آن را ندارید.'))
+  }
+  finally {
+    await navigateTo({ path: route.path, query: { ...route.query, open: undefined } }, { replace: true })
+  }
+}
+watch(() => route.query.open, (v) => { if (v) openFromQuery() })
 
 async function download(f: FileRef) {
   try {
@@ -1119,6 +1132,21 @@ async function download(f: FileRef) {
   }
 }
 
+
+/* ── Excel / Word export of the current filters (needs the module's `export` permission) ── */
+const exporting = ref<'' | 'xlsx' | 'docx'>('')
+async function runExport(format: 'xlsx' | 'docx') {
+  exporting.value = format
+  try {
+    await store.exportFile(format)
+  }
+  catch (e) {
+    notify.error(requestErrorMessage(e, 'دریافت خروجی انجام نشد.'))
+  }
+  finally {
+    exporting.value = ''
+  }
+}
 const pageCount = computed(() => Math.max(1, Math.ceil(store.total / store.perPage)))
 
 function countByStatus(status: SupplierStatus) {
@@ -1248,6 +1276,9 @@ function paymentText(p: { payment?: string | null, creditMonths?: number | null 
 
 /* ── add / edit ── */
 const formOpen = ref(false)
+// the big wizard is downloaded only when it is first opened (keeps the list page fast to load)
+const wizardLoaded = ref(false)
+watch(formOpen, (v) => { if (v) wizardLoaded.value = true })
 const editing = ref<Supplier | null>(null)
 function openCreate() {
   editing.value = null

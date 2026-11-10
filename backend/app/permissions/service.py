@@ -37,6 +37,8 @@ its `scope_resolver`), since no business module exists yet in Phase 2.
 """
 from dataclasses import dataclass
 
+from flask import has_request_context, request
+
 from app.core.authorization.models import (
     PermissionEffect,
     ScopeType,
@@ -63,6 +65,21 @@ class Grant:
 
 
 def get_effective_grants(user: User) -> list[Grant]:
+    """Per-request memo for GET requests: a list screen asks "may this user update / review?" for
+    every row, and each ask used to cost three queries. A GET never changes grants, so the answer
+    is stable for the rest of that request. (Stored on the WSGI environ, which is per request.)"""
+    cache = None
+    if has_request_context() and request.method == "GET":
+        cache = request.environ.setdefault("polychem.grants_cache", {})
+        if user.id in cache:
+            return list(cache[user.id])
+    grants = _resolve_effective_grants(user)
+    if cache is not None:
+        cache[user.id] = tuple(grants)
+    return grants
+
+
+def _resolve_effective_grants(user: User) -> list[Grant]:
     """
     Resolve Effective Grants(user) per AUTHORIZATION.md §5: the union of
     active role_permission_scopes (via the user's active roles) and

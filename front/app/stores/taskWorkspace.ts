@@ -59,6 +59,8 @@ export interface TaskEntity {
   isArchived: boolean
   /** Full ISO timestamp (UTC, with offset) -- format it with formatTehranDateTime. */
   createdAt: string
+  /** when the task reached DONE (ISO, UTC) -- null while it is open */
+  completedAt: string | null
   recurrence: RecurrenceRule | null
   recurrenceSourceId: string | null
   /** The caller is a «مدیر» of this task: may rename / delete it and delete its messages, checklist items, others' files. */
@@ -84,6 +86,7 @@ interface BackendTask {
   recurrence_source_id: number | null
   can_manage: boolean
   created_at: string
+  completed_at?: string | null
 }
 
 interface TaskMeta {
@@ -171,6 +174,7 @@ export const useTaskWorkspaceStore = defineStore('task-workspace', () => {
       isDraft: t.is_draft,
       isArchived: t.is_archived || t.status === 'CANCELLED',
       createdAt: t.created_at || '',
+      completedAt: t.completed_at || null,
       recurrence: t.recurrence ?? null,
       recurrenceSourceId: t.recurrence_source_id ? String(t.recurrence_source_id) : null,
       canManage: Boolean(t.can_manage),

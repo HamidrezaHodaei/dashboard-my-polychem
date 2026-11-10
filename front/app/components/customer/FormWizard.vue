@@ -3,7 +3,7 @@
   <Dialog :open="open" @update:open="v => emit('update:open', v)">
     <DialogContent
       dir="rtl"
-      class="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl [&_input:not([dir=ltr])]:text-right [&_textarea:not([dir=ltr])]:text-right"
+      class="customer-wizard flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl [&_input:not([dir=ltr])]:text-right [&_textarea:not([dir=ltr])]:text-right"
       @interact-outside.prevent
     >
       <!-- Header -->
@@ -136,6 +136,19 @@
             <div class="space-y-1.5">
               <Label class="font-semibold">شناسه اقتصادی</Label>
               <Input v-model="form.economic_id" dir="ltr" inputmode="numeric" />
+            </div>
+            <div class="space-y-1.5">
+              <Label class="font-semibold">تلفن شرکت</Label>
+              <Input
+                v-model="form.company_phone"
+                dir="ltr"
+                inputmode="tel"
+                maxlength="30"
+                placeholder="02122898979"
+                :aria-invalid="!!err.company_phone"
+              />
+              <p v-if="err.company_phone" class="text-xs text-destructive">{{ err.company_phone }}</p>
+              <p v-else class="text-xs text-muted-foreground">شمارهٔ خود شرکت؛ جدا از شمارهٔ افراد تماس.</p>
             </div>
             <div class="space-y-1.5">
               <Label class="font-semibold">تاریخ شروع فعالیت</Label>
@@ -500,7 +513,7 @@
               <div class="grid gap-3 sm:grid-cols-4">
                 <div class="space-y-1.5 sm:col-span-2">
                   <Label class="text-xs font-semibold">نام محصول <span class="text-destructive">*</span></Label>
-                  <CustomerOptionSelect v-model="p.name" kind="PRODUCT" :invalid="!!err[`produced.${i}.name`]" />
+                  <CustomerOptionSelect v-model="p.name" kind="PRODUCED" :invalid="!!err[`produced.${i}.name`]" />
                   <p v-if="err[`produced.${i}.name`]" class="text-xs text-destructive">{{ err[`produced.${i}.name`] }}</p>
                 </div>
                 <div class="space-y-1.5 sm:col-span-2">
@@ -533,19 +546,11 @@
             <p class="text-xs text-muted-foreground">جمع میزان تولید سالانه‌ی محصولات بالا (به تن)؛ خودکار محاسبه می‌شود.</p>
           </div>
 
-          <!-- تعداد خطوط تولید: typed by hand (independent of the names below) -->
+          <!-- تعداد کل خطوط تولید: the sum of the counts typed next to each line below (read-only) -->
           <div class="space-y-1.5">
-            <Label class="font-semibold">تعداد خطوط تولید</Label>
-            <Input
-              v-model="form.production_lines_count"
-              dir="ltr"
-              inputmode="numeric"
-              class="text-right"
-              maxlength="6"
-              placeholder="مثلاً ۳"
-              :aria-invalid="!!err.production_lines_count"
-            />
-            <p v-if="err.production_lines_count" class="text-xs text-destructive">{{ err.production_lines_count }}</p>
+            <Label class="font-semibold">تعداد کل خطوط تولید</Label>
+            <Input :model-value="totalLinesText" dir="auto" class="text-right" disabled />
+            <p class="text-xs text-muted-foreground">جمع تعداد وارد‌شده برای هر خط در پایین؛ خودکار به‌روز می‌شود.</p>
           </div>
 
           <!-- نام خطوط تولید: add / remove by hand, any number -->
@@ -562,11 +567,22 @@
             <p v-if="!form.production_line_names.length" class="text-xs text-muted-foreground">
               هنوز خطی ثبت نشده است؛ با دکمه‌ی «افزودن خط تولید» هر تعداد که لازم است نام خط اضافه کنید.
             </p>
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div class="space-y-3">
               <div v-for="(_, i) in form.production_line_names" :key="i" class="space-y-1.5">
-                <Label class="text-xs font-semibold">نام خط تولید {{ fmtNum(i + 1) }}</Label>
+                <Label class="text-xs font-semibold">خط تولید {{ fmtNum(i + 1) }}</Label>
                 <div class="flex items-center gap-1.5">
-                  <Input v-model="form.production_line_names[i]" dir="auto" maxlength="255" />
+                  <Input v-model="form.production_line_names[i]" dir="auto" maxlength="255" placeholder="نام خط تولید" class="min-w-0 flex-1" />
+                  <Input
+                    v-model="form.production_line_counts[i]"
+                    dir="ltr"
+                    inputmode="numeric"
+                    maxlength="6"
+                    placeholder="تعداد"
+                    title="تعداد این خط تولید"
+                    aria-label="تعداد این خط تولید"
+                    class="w-24 shrink-0 text-center"
+                    :aria-invalid="!!err[`production_line.${i}.count`]"
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -574,11 +590,12 @@
                     class="shrink-0 text-destructive hover:text-destructive"
                     title="حذف این خط"
                     aria-label="حذف این خط"
-                    @click="form.production_line_names.splice(i, 1)"
+                    @click="removeLine(i)"
                   >
                     <Icon name="lucide:trash-2" class="size-4" />
                   </Button>
                 </div>
+                <p v-if="err[`production_line.${i}.count`]" class="text-xs text-destructive">{{ err[`production_line.${i}.count`] }}</p>
               </div>
             </div>
             <p v-if="err.production_line_names" class="text-xs text-destructive">{{ err.production_line_names }}</p>
@@ -680,7 +697,7 @@
               <div class="grid gap-3 sm:grid-cols-2">
                 <div class="space-y-1.5">
                   <Label class="text-xs font-semibold">نام محصول <span class="text-destructive">*</span></Label>
-                  <CustomerOptionSelect v-model="p.name" kind="PRODUCT" :invalid="!!err[`consumed.${i}.name`]" />
+                  <CustomerOptionSelect v-model="p.name" kind="CONSUMED" :invalid="!!err[`consumed.${i}.name`]" />
                   <p v-if="err[`consumed.${i}.name`]" class="text-xs text-destructive">{{ err[`consumed.${i}.name`] }}</p>
                 </div>
                 <div class="space-y-1.5">
@@ -791,7 +808,7 @@
                 >
                   <div class="flex items-start gap-2">
                     <div class="grid flex-1 gap-2 sm:grid-cols-2">
-                      <CustomerOptionSelect v-model="g.product" kind="PRODUCT" placeholder="نام محصول" :invalid="!!err[`supplier.${i}.grade.${j}`]" />
+                      <CustomerOptionSelect v-model="g.product" kind="CONSUMED" placeholder="نام محصول" :invalid="!!err[`supplier.${i}.grade.${j}`]" />
                       <CustomerOptionSelect v-model="g.grade" kind="GRADE" placeholder="گرید" />
                     </div>
                     <Button
@@ -1146,7 +1163,7 @@ import { formatJalali } from '~/utils/jalali'
 import {
   ACTIVITY_LABELS, COMMERCIAL_STATUS_LABELS, CREDIT_MONTHS, CREDIT_RATING_LABELS, IRAN_PROVINCES, OPERATIONAL_LABELS,
   PAYMENT_LABELS, PURCHASE_LABELS, SOURCE_LABELS, UNIT_LABELS, CONTACT_POSITIONS, POSITION_OTHER, normalizeUnit,
-  totalCapacityTons, MAX_PRODUCTION_LINES,
+  totalCapacityTons, MAX_PRODUCTION_LINES, totalProductionLines,
   blankConsumed, blankContact, blankCurrentSupplier, blankCustomerForm, blankIndustry, blankLog, blankProduced,
   DELIVERY_LABELS, blankSupplierGrade, customerToForm, formToPayload, isCreditPayment, validateCustomerStep,
 } from '~/utils/customer-form'
@@ -1191,7 +1208,15 @@ const scrollerEl = ref<HTMLElement | null>(null)
 function addLine() {
   if (form.production_line_names.length >= MAX_PRODUCTION_LINES) return
   form.production_line_names.push('')
+  form.production_line_counts.push('1')
 }
+function removeLine(i: number) {
+  form.production_line_names.splice(i, 1)
+  form.production_line_counts.splice(i, 1)
+}
+const totalLinesText = computed(() => form.production_line_names.some(n => n.trim())
+  ? new Intl.NumberFormat('fa-IR').format(totalProductionLines(form))
+  : '—')
 
 const isEdit = computed(() => !!props.customer)
 // a file sent back by the manager (NEEDS_EDIT) can be submitted again; otherwise "final" is final

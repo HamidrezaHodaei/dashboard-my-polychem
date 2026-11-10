@@ -33,6 +33,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.creator_snapshot import display_name as _creator_display, register as _register_creator
 from app.core.base import ActiveFlagMixin, BigIntUnsigned, SoftDeleteMixin, TimestampMixin
 from app.extensions import db
 
@@ -117,8 +118,10 @@ class QuantityUnit(str, enum.Enum):
 class OptionKind(str, enum.Enum):
     """Admin-managed pick-lists of the customer wizard (same idea as CustomerCategory)."""
 
-    PRODUCT = "PRODUCT"  # نام محصول
+    PRODUCT = "PRODUCT"  # legacy shared product list (kept; its entries were copied into PRODUCED and CONSUMED)
     GRADE = "GRADE"  # نام گرید
+    PRODUCED = "PRODUCED"  # محصولات تولیدی -- its own list, managed by the admin
+    CONSUMED = "CONSUMED"  # محصولات مصرفی -- its own list, managed by the admin
 
 
 class ActivityType(str, enum.Enum):
@@ -154,6 +157,8 @@ class Customer(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company_national_id: Mapped[str | None] = mapped_column(String(11), nullable=True)
     registration_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # تلفن شرکت (legal customers) -- the company's own number, separate from the contact persons' numbers
+    company_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     economic_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
     activity_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # تاریخ شروع فعالیت (UI: شمسی)
 
@@ -185,6 +190,8 @@ class Customer(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
     production_lines_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # نام خطوط تولید -- one name per line (list of str); at most `production_lines_count` entries.
     production_line_names: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
+    # how many units of each named line (parallel to production_line_names); the total count is their sum
+    production_line_counts: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
     # ظرفیت تولید کارخانه: tons per year = the sum of produced_products amounts (kg converted).
     # Derived by services.py whenever produced_products is saved; never set by clients.
     production_capacity: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -264,6 +271,9 @@ class Customer(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # The creator's name as TEXT, written once when the record is created (never a live join): it stays
+    # correct when the account is renamed, re-assigned, moved or removed. See core/creator_snapshot.py.
+    creator_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     created_by = relationship("User", foreign_keys=[created_by_user_id], lazy="joined")
     assigned_to = relationship("User", foreign_keys=[assigned_to_user_id], lazy="joined")
@@ -283,7 +293,7 @@ class Customer(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
 
     @property
     def created_by_name(self) -> str | None:
-        return self.created_by.full_name if self.created_by is not None else None
+        return _creator_display(self)
 
     @property
     def assigned_to_name(self) -> str | None:
@@ -331,3 +341,6 @@ class CustomerOptionItem(TimestampMixin, ActiveFlagMixin, db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<CustomerOptionItem id={self.id} kind={self.kind} name={self.name!r}>"
+
+
+_register_creator(Customer)

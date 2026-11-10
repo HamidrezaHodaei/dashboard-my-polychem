@@ -7,7 +7,19 @@
      The native tooltip (title) still gives the full month detail for anyone who hovers. -->
 <template>
   <div class="w-full overflow-x-auto pb-1" dir="ltr">
-    <div class="flex" :style="{ minWidth: `${Math.max(data.length, 1) * columnMin}rem` }">
+    <div class="flex" :style="{ minWidth: `${Math.max(data.length, 1) * columnMin + 5}rem` }">
+      <!-- Y axis: a regular numeric scale (0 … max) so the size of every month can be read off the grid -->
+      <div class="relative w-20 shrink-0" :style="{ height: `${PLOT_HEIGHT}px` }" dir="rtl" aria-hidden="true">
+        <div
+          v-for="t in ticks"
+          :key="t.value"
+          class="absolute left-0 right-2 flex -translate-y-1/2 flex-col items-end leading-none"
+          :style="{ bottom: `${t.pct}%` }"
+        >
+          <span class="text-[10px] font-medium tabular-nums text-muted-foreground">{{ t.num }}</span>
+          <span class="mt-0.5 text-[8px] text-muted-foreground/70">{{ t.unit }}</span>
+        </div>
+      </div>
       <div class="relative flex-1">
         <!-- plot area -->
         <div class="relative" :style="{ height: `${PLOT_HEIGHT}px` }">
@@ -17,6 +29,7 @@
             class="absolute inset-x-0 border-t border-dashed border-border/60"
             :style="{ bottom: `${g}%` }"
           />
+          <div class="absolute inset-y-0 left-0 border-l border-border/70" />
           <div class="absolute inset-x-0 border-t border-foreground/30" :style="{ bottom: `${zeroBottom}%` }" />
 
           <div class="absolute inset-0 flex">
@@ -82,7 +95,21 @@ const scale = computed(() => {
   return { top, bottom, range: (top - bottom) || 1 }
 })
 const zeroBottom = computed(() => ((0 - scale.value.bottom) / scale.value.range) * 100)
-const gridLines = computed(() => [25, 50, 75, 100].map(p => p).filter(p => Math.abs(p - zeroBottom.value) > 3))
+/** "Nice" tick values (1 / 2 / 5 x 10^n) covering the scale, ~5 steps. */
+const ticks = computed(() => {
+  const { top, bottom, range } = scale.value
+  const raw = range / 5
+  const pow = 10 ** Math.floor(Math.log10(raw || 1))
+  const f = raw / pow
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow
+  const out: { value: number, pct: number, num: string, unit: string }[] = []
+  for (let v = Math.ceil(bottom / step) * step; v <= top + step * 1e-6 && out.length < 12; v += step) {
+    const p = chartLabelParts(Math.round(v), props.metric)
+    out.push({ value: v, pct: ((v - bottom) / range) * 100, ...p })
+  }
+  return out
+})
+const gridLines = computed(() => ticks.value.map(t => t.pct).filter(p => Math.abs(p - zeroBottom.value) > 1))
 
 function barStyle(v: number) {
   const h = (Math.abs(v) / scale.value.range) * 100

@@ -20,7 +20,7 @@
       </Card>
 
       <template v-else>
-        <Card class="gap-4 p-5 shadow-none" :class="{ 'opacity-60': store.analyticsLoading }">
+        <PrintableChart title="روند فروش ماهانه" class="gap-4 p-5 shadow-none" :class="{ 'opacity-60': store.analyticsLoading }">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 class="font-semibold">روند فروش ماهانه</h2>
@@ -29,48 +29,48 @@
             <MetricToggle v-model="trendMetric" />
           </div>
           <CrmTrendChart :data="data.monthly" :metric="trendMetric" />
-        </Card>
+        </PrintableChart>
 
         <div class="grid gap-6 lg:grid-cols-2">
-          <Card class="gap-4 p-5 shadow-none">
+          <PrintableChart title="سهم گریدها" class="gap-4 p-5 shadow-none">
             <div class="flex items-center justify-between gap-2">
               <h2 class="font-semibold">سهم گریدها</h2>
               <MetricToggle v-model="productMetric" />
             </div>
             <CrmDonutChart :data="productMetric === 'amount' ? data.by_product : data.by_product_quantity" :metric="productMetric" />
-          </Card>
+          </PrintableChart>
 
-          <Card class="gap-4 p-5 shadow-none">
+          <PrintableChart title="برترین مشتریان (ریال)" class="gap-4 p-5 shadow-none">
             <h2 class="font-semibold">برترین مشتریان (ریال)</h2>
             <CrmRankedBars :data="data.by_customer" metric="amount" />
-          </Card>
+          </PrintableChart>
 
-          <Card v-if="data.yearly.length > 1" class="gap-4 p-5 shadow-none">
+          <PrintableChart title="مقایسه سالانه (ریال)" v-if="data.yearly.length > 1" class="gap-4 p-5 shadow-none">
             <h2 class="font-semibold">مقایسه سالانه (ریال)</h2>
             <CrmRankedBars :data="yearRows" metric="amount" />
-          </Card>
+          </PrintableChart>
 
-          <Card class="gap-4 p-5 shadow-none">
+          <PrintableChart title="نوع فروش (ریال)" class="gap-4 p-5 shadow-none">
             <h2 class="font-semibold">نوع فروش (ریال)</h2>
             <CrmDonutChart :data="data.by_sale_type" metric="amount" />
-          </Card>
+          </PrintableChart>
 
-          <Card class="gap-4 p-5 shadow-none">
+          <PrintableChart title="نحوه پرداخت (ریال)" class="gap-4 p-5 shadow-none">
             <h2 class="font-semibold">نحوه پرداخت (ریال)</h2>
             <CrmDonutChart :data="data.by_payment" metric="amount" />
-          </Card>
+          </PrintableChart>
 
-          <Card class="gap-4 p-5 shadow-none">
+          <PrintableChart title="فروش به تفکیک استان (کیلوگرم)" class="gap-4 p-5 shadow-none">
             <h2 class="font-semibold">فروش به تفکیک استان (کیلوگرم)</h2>
             <p class="-mt-3 text-xs text-muted-foreground">استان کارخانه در پرونده مشتری</p>
             <CrmRankedBars :data="data.by_province" metric="quantity_kg" />
-          </Card>
+          </PrintableChart>
 
-          <Card class="gap-4 p-5 shadow-none">
+          <PrintableChart title="فروش به تفکیک صنعت (ریال)" class="gap-4 p-5 shadow-none">
             <h2 class="font-semibold">فروش به تفکیک صنعت (ریال)</h2>
             <p class="-mt-3 text-xs text-muted-foreground">صنعت فعالیت در پرونده مشتری</p>
             <CrmRankedBars :data="data.by_industry" metric="amount" />
-          </Card>
+          </PrintableChart>
         </div>
       </template>
     </template>

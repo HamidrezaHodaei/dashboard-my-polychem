@@ -9,6 +9,8 @@ same set of sales.
 from flask import Blueprint, g, request
 
 from app.core.auth.decorators import require_authenticated
+from app.core.export_files import collect_pages, send_export
+from app.modules import export_rows
 from app.modules.crm import services
 from app.modules.crm.schemas import (
     ImportRequest, PaymentMethodIn, PaymentMethodUpdate, SaleCreate, SaleUpdate,
@@ -67,6 +69,18 @@ def list_sales():
         data=[services.dump_sale(s) for s in items],
         meta={"page": page, "per_page": per_page, "total": total},
     )
+
+
+@bp.get("/sales/export")
+@require_authenticated
+def export_sales():
+    """Excel (or Word) of the sales matching the current filters (`crm.sale.export`)."""
+    export_rows.require_export(g.current_user, "crm.sale.export")
+    filters = services.parse_filters(request.args)
+    sort = request.args.get("sort", "-date")
+    items = collect_pages(lambda p, n: services.list_sales(g.current_user, page=p, per_page=n, filters=filters, sort=sort))
+    title, headers, rows = export_rows.sales_table([services.dump_sale(s) for s in items])
+    return send_export(request.args.get("format", "xlsx"), title=title, filename="crm-sales", headers=headers, rows=rows)
 
 
 @bp.post("/sales/import")

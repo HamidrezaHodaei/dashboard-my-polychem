@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { MyActions, RequestReviewAction, RequestStatusKey } from '~/utils/request-workflow'
-import { ApiError, apiFetch, apiFetchBlob, apiFetchPage } from '~/services/backendApi'
+import { ApiError, apiDownload, apiFetch, apiFetchBlob, apiFetchPage } from '~/services/backendApi'
 import type { FileRef, StoredFile } from '~/utils/supplier-form'
 
 export type SupplierType = 'INDIVIDUAL' | 'LEGAL'
@@ -117,6 +117,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
   const canCreate = ref(true)
   const canUpdate = ref(true)
   const canDelete = ref(true)
+  const canExport = computed(() => useAuthStore().hasPermission('procurement.supplier.export'))
 
   const filters = reactive<SupplierFilters>({
     search: '', category: '', subcategory: '', status: '', quality: '', supplier_type: '',
@@ -264,6 +265,21 @@ export const useSupplierStore = defineStore('suppliers', () => {
   async function decideRequest(id: number, action: RequestReviewAction, note: string) {
     return replace(await apiFetch<Supplier>(`/suppliers/${id}/review`, { method: 'POST', body: { action, note: note || null } }))
   }
+  /** Excel / Word of every supplier matching the CURRENT filters (server checks `procurement.supplier.export`). */
+  async function exportFile(format: 'xlsx' | 'docx') {
+    await apiDownload('/suppliers/export', {
+      format,
+      search: filters.search.trim() || undefined,
+      category: filters.category || undefined,
+      subcategory: filters.subcategory || undefined,
+      status: filters.status || undefined,
+      quality: filters.quality || undefined,
+      supplier_type: filters.supplier_type || undefined,
+      include_inactive: true,
+    }, `suppliers-${new Date().toISOString().slice(0, 10)}.${format}`)
+  }
+  /** one supplier by id (a notification can point at a record that is not on the current page) */
+  const fetchOne = (id: number) => apiFetch<Supplier>(`/suppliers/${id}`)
   function replace(updated: Supplier) {
     const i = suppliers.value.findIndex(s => s.id === updated.id)
     if (i >= 0) suppliers.value[i] = updated
@@ -286,8 +302,8 @@ export const useSupplierStore = defineStore('suppliers', () => {
 
   return {
     suppliers, categories, categoryItems, total, page, perPage, loading, loadError, filters,
-    canCreate, canUpdate, canDelete,
-    finalizeSupplier, requestChange, decideRequest,
+    canCreate, canUpdate, canDelete, canExport, exportFile,
+    finalizeSupplier, requestChange, decideRequest, fetchOne,
     load, loadCategories, loadCategoryItems, addCategory, updateCategory, removeCategory,
     loadPublicCategories, loadPublicCategoryTree, uploadFile, uploadPublicFile, downloadFile, submitPublic,
     setPage, applyFilters, resetFilters,
