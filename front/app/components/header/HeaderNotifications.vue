@@ -26,7 +26,7 @@
     <PopoverContent
       side="bottom"
       dir="rtl"
-      class="w-72 p-0 text-right"
+      class="w-80 p-0 text-right"
     >
       <div class="flex items-center justify-between px-3 pb-1.5 pt-2.5">
         <span class="text-sm font-semibold">اعلان‌ها</span>
@@ -46,46 +46,61 @@
           v-for="n in latest"
           :key="n.id"
         >
-          <button
-            type="button"
-            dir="rtl"
-            class="block w-full px-3 py-2 text-right transition-colors hover:bg-accent hover:text-accent-foreground"
-            :class="n.is_read ? 'text-foreground/70' : 'bg-primary/5'"
-            @click="openNotification(n)"
-          >
-            <span class="flex items-start gap-2">
-              <Icon
-                :name="iconFor(n.type)"
-                class="mt-0.5 size-4 shrink-0"
-                :class="n.type === 'TASK_OVERDUE' ? 'text-destructive' : n.type === 'TASK_DUE_SOON' ? 'text-amber-500' : 'text-primary'"
-                aria-hidden="true"
-              />
-              <span class="min-w-0 flex-1 text-right">
-                <span
-                  class="block truncate text-[13px] font-medium text-foreground"
-                  dir="rtl"
-                >{{ n.title }}</span>
-                <span
-                  v-if="n.body"
-                  class="block text-xs leading-5 line-clamp-2"
-                  dir="rtl"
-                >{{ n.body }}</span>
-                <span class="mt-0.5 flex items-center gap-x-1 text-[11px] text-muted-foreground">
-                  <Icon
-                    name="lucide:clock"
-                    class="size-3"
-                    aria-hidden="true"
-                  />
-                  <span dir="rtl">{{ formatNotificationTime(n.created_at) }}</span>
+          <div :class="n.is_read ? 'text-foreground/70' : 'bg-primary/5'">
+            <button
+              type="button"
+              dir="rtl"
+              class="block w-full px-3 pt-2 text-right transition-colors hover:bg-accent hover:text-accent-foreground"
+              :class="canExpand(n) ? 'pb-0.5' : 'pb-2'"
+              @click="openNotification(n)"
+            >
+              <span class="flex items-start gap-2">
+                <Icon
+                  :name="iconFor(n.type)"
+                  class="mt-0.5 size-4 shrink-0"
+                  :class="iconColor(n.type)"
+                  aria-hidden="true"
+                />
+                <span class="min-w-0 flex-1 text-right">
+                  <span
+                    class="block text-[13px] font-medium text-foreground"
+                    :class="isExpanded(n) ? 'whitespace-pre-line break-words' : 'truncate'"
+                    dir="rtl"
+                  >{{ n.title }}</span>
+                  <span
+                    v-if="n.body"
+                    class="block text-xs leading-5"
+                    :class="isExpanded(n) ? 'whitespace-pre-line break-words' : 'line-clamp-2'"
+                    dir="rtl"
+                  >{{ n.body }}</span>
+                  <span class="mt-0.5 flex items-center gap-x-1 text-[11px] text-muted-foreground">
+                    <Icon
+                      name="lucide:clock"
+                      class="size-3"
+                      aria-hidden="true"
+                    />
+                    <span dir="rtl">{{ formatNotificationTime(n.created_at) }}</span>
+                  </span>
                 </span>
+                <span
+                  v-if="!n.is_read"
+                  class="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
+                  aria-label="خوانده‌نشده"
+                />
               </span>
-              <span
-                v-if="!n.is_read"
-                class="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
-                aria-label="خوانده‌نشده"
-              />
-            </span>
-          </button>
+            </button>
+            <!-- a separate control (never a button inside a button): reads the whole text in place -->
+            <button
+              v-if="canExpand(n)"
+              type="button"
+              dir="rtl"
+              class="block w-full px-3 pb-2 pr-9 text-right text-[11px] font-medium text-primary hover:underline"
+              :aria-expanded="isExpanded(n)"
+              @click.stop="toggleExpanded(n)"
+            >
+              {{ isExpanded(n) ? 'مشاهده کمتر' : 'مشاهده بیشتر' }}
+            </button>
+          </div>
         </li>
         <li
           v-if="!latest.length"
@@ -133,6 +148,24 @@ const store = useNotificationsStore()
 const open = ref(false)
 const latest = computed(() => store.items.slice(0, PREVIEW_COUNT))
 
+// «مشاهده بیشتر»: the preview clips long text (title to one line, body to two); this lets the user open
+// the complete message in place. Offered only when the text can actually be clipped.
+const expanded = ref<Set<number>>(new Set())
+const TITLE_CLIP = 34
+const BODY_CLIP = 70
+const canExpand = (n: AppNotification) => n.title.length > TITLE_CLIP || (n.body?.length ?? 0) > BODY_CLIP || (n.body?.includes('\n') ?? false)
+const isExpanded = (n: AppNotification) => expanded.value.has(n.id)
+function toggleExpanded(n: AppNotification) {
+  const next = new Set(expanded.value)
+  if (!next.delete(n.id)) next.add(n.id)
+  expanded.value = next
+}
+const iconColor = (type: string) => (
+  type === 'TASK_OVERDUE' || type === 'CUSTOMER_FOLLOWUP_OVERDUE'
+    ? 'text-destructive'
+    : type === 'TASK_DUE_SOON' || type === 'CUSTOMER_FOLLOWUP_DUE' ? 'text-amber-500' : 'text-primary'
+)
+
 onMounted(() => store.start())
 onBeforeUnmount(() => store.stop())
 
@@ -146,6 +179,19 @@ const iconFor = (type: string) => ({
   REVIEW_RESUBMITTED: 'lucide:rotate-ccw',
   CHANGE_REQUEST: 'lucide:file-pen-line',
   REVIEW_REQUEST: 'lucide:inbox',
+  SAMPLE_SUBMITTED: 'lucide:flask-conical',
+  SAMPLE_APPROVED: 'lucide:check-circle-2',
+  SAMPLE_REJECTED: 'lucide:x-circle',
+  SAMPLE_ON_HOLD: 'lucide:pause-circle',
+  SAMPLE_DISPATCHED: 'lucide:truck',
+  SAMPLE_DELIVERED: 'lucide:package-check',
+  SAMPLE_REMIND_SHIP: 'lucide:package-open',
+  SAMPLE_REMIND_DELIVER: 'lucide:truck',
+  SAMPLE_REMIND_FOLLOWUP: 'lucide:phone-call',
+  SAMPLE_FOLLOWUP_DUE: 'lucide:calendar-clock',
+  SAMPLE_FEEDBACK: 'lucide:message-circle-heart',
+  CUSTOMER_FOLLOWUP_DUE: 'lucide:phone-call',
+  CUSTOMER_FOLLOWUP_OVERDUE: 'lucide:phone-missed',
 } as Record<string, string>)[type] ?? 'lucide:bell'
 
 async function openNotification(n: AppNotification) {

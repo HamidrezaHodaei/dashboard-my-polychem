@@ -77,6 +77,7 @@ _NAVIGATION_CATALOG: list[dict] = [
     _entry("customers", "Customers", "/crm/customers", "crm.customer.read"),
     _entry("crm_sales", "Sales", "/crm/sales", "crm.sale.read"),
     _entry("crm_dashboard", "Sales Dashboard", "/crm/dashboard", "crm.sale.read"),
+    _entry("request_samples", "Request Sample", "/crm/request-samples", "crm.request_sample.read"),
     _entry("crm_settings", "CRM Settings", "/crm/settings", "crm.product.read"),
     _entry("logistics_companies", "Transport Companies", "/logistics/companies", "logistics.company.read"),
     _entry("logistics_drivers", "Drivers", "/logistics/drivers", "logistics.driver.read"),

@@ -156,7 +156,14 @@
           <span>مدیریت امور محوله</span>
         </div>
 
-        <h1 class="text-2xl font-semibold tracking-tight md:text-3xl">
+        <h1 class="flex items-center gap-3 text-2xl font-semibold tracking-tight md:text-3xl">
+          <!-- the unit's shared picture, same for every user who can open this worklist -->
+          <img
+            v-if="selectedProject && pictures.pictureUrl(selectedProject, 'logo')"
+            :src="pictures.pictureUrl(selectedProject, 'logo')"
+            alt=""
+            class="size-10 shrink-0 rounded-full border object-cover"
+          >
           {{ sectionTitle }}
         </h1>
 
@@ -976,15 +983,24 @@
           >
             <div
               :class="[
-                'flex min-h-36 items-start justify-between gap-3 p-5',
+                'relative isolate flex min-h-36 items-start justify-between gap-3 p-5',
                 projectAccent(project.accent),
               ]"
             >
+              <!-- shared banner behind the card (set by an admin, same for everybody of the unit) -->
+              <template v-if="pictures.pictureUrl(project, 'header')">
+                <img
+                  :src="pictures.pictureUrl(project, 'header')"
+                  alt=""
+                  class="absolute inset-0 -z-10 size-full object-cover"
+                >
+                <div class="absolute inset-0 -z-10 bg-black/35" />
+              </template>
               <div class="mt-2 flex min-w-0 items-center gap-4 text-white">
                 <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white/10 backdrop-blur-sm">
                   <img
-                    v-if="prefs.logos.value[project.id]"
-                    :src="prefs.logos.value[project.id]"
+                    v-if="pictures.pictureUrl(project, 'logo')"
+                    :src="pictures.pictureUrl(project, 'logo')"
                     alt=""
                     class="size-full object-cover"
                   >
@@ -1045,8 +1061,8 @@
               <!-- the department's picture instead of the responsible person's name -->
               <span class="inline-flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-background">
                 <img
-                  v-if="prefs.logos.value[project.id]"
-                  :src="prefs.logos.value[project.id]"
+                  v-if="pictures.pictureUrl(project, 'logo')"
+                  :src="pictures.pictureUrl(project, 'logo')"
                   alt=""
                   class="size-full object-cover"
                 >
@@ -1075,60 +1091,83 @@
         </div>
       </div>
 
-      <!-- department settings: picture (logo) + quick actions -->
+      <!-- department settings: shared pictures (admin only) + quick actions -->
       <Dialog v-model:open="settingsOpen">
         <DialogContent class="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>تنظیمات {{ settingsProject?.name }}</DialogTitle>
-            <DialogDescription>تصویر این واحد روی کارت و کارتابل نمایش داده می‌شود (فقط برای شما).</DialogDescription>
+            <DialogDescription>
+              {{ store.isAdmin
+                ? 'تصویر و پس‌زمینه‌ی این واحد برای همه‌ی کاربران دارای دسترسی به کارتابل این واحد نمایش داده می‌شود.'
+                : 'تصویر و پس‌زمینه‌ی کارتابل را فقط ادمین می‌تواند تغییر دهد.' }}
+            </DialogDescription>
           </DialogHeader>
           <div
             v-if="settingsProject"
             class="space-y-4"
           >
-            <div class="flex items-center gap-4">
-              <span class="inline-flex size-16 items-center justify-center overflow-hidden rounded-full border bg-muted/40">
-                <img
-                  v-if="prefs.logos.value[settingsProject.id]"
-                  :src="prefs.logos.value[settingsProject.id]"
-                  alt=""
-                  class="size-full object-cover"
-                >
-                <Icon
-                  v-else
-                  name="lucide:building-2"
-                  class="size-7 text-muted-foreground"
-                />
-              </span>
-              <div class="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="gap-2"
-                  @click="logoInput?.click()"
-                >
-                  <Icon
-                    name="lucide:image-up"
-                    class="size-4"
-                  /> انتخاب تصویر
-                </Button>
-                <Button
-                  v-if="prefs.logos.value[settingsProject.id]"
-                  variant="ghost"
-                  size="sm"
-                  @click="prefs.removeLogo(settingsProject.id)"
-                >
-                  حذف تصویر
-                </Button>
+            <div
+              v-for="kind in pictureKinds"
+              :key="kind.key"
+              class="space-y-2"
+            >
+              <div class="text-sm font-medium">
+                {{ kind.label }}
               </div>
-              <input
-                ref="logoInput"
-                type="file"
-                accept="image/*"
-                class="hidden"
-                @change="onLogoPicked"
-              >
+              <div class="flex items-center gap-4">
+                <span
+                  :class="[
+                    'inline-flex items-center justify-center overflow-hidden border bg-muted/40',
+                    kind.key === 'logo' ? 'size-16 rounded-full' : 'h-16 w-28 rounded-lg',
+                  ]"
+                >
+                  <img
+                    v-if="pictures.pictureUrl(settingsEntity, kind.key)"
+                    :src="pictures.pictureUrl(settingsEntity, kind.key)"
+                    alt=""
+                    class="size-full object-cover"
+                  >
+                  <Icon
+                    v-else
+                    :name="kind.key === 'logo' ? 'lucide:building-2' : 'lucide:image'"
+                    class="size-7 text-muted-foreground"
+                  />
+                </span>
+                <div
+                  v-if="store.isAdmin"
+                  class="flex flex-wrap gap-2"
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="gap-2"
+                    :disabled="pictureBusy"
+                    @click="pickPicture(kind.key)"
+                  >
+                    <Icon
+                      name="lucide:image-up"
+                      class="size-4"
+                    /> انتخاب تصویر
+                  </Button>
+                  <Button
+                    v-if="kind.key === 'logo' ? settingsEntity?.hasLogo : settingsEntity?.hasHeader"
+                    variant="ghost"
+                    size="sm"
+                    :disabled="pictureBusy"
+                    @click="dropPicture(kind.key)"
+                  >
+                    حذف تصویر
+                  </Button>
+                </div>
+              </div>
             </div>
+            <input
+              ref="pictureInput"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              class="hidden"
+              @change="onPicturePicked"
+            >
             <div class="flex flex-wrap gap-2">
               <Button
                 class="gap-2"
@@ -1294,9 +1333,15 @@
           </div>
         </div>
 
-        <div v-else>
-          <div class="flex flex-col gap-3 border-b px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
-            <div class="flex items-center gap-2">
+        <!-- ── Calendar: month grid + agenda of the selected day ──────────────────────
+             Pattern: the grid only ever shows a SHORT hint per day (2 title chips + "+N" on wide
+             screens, coloured dots on phones). Full titles and descriptions live in the agenda list
+             under the grid, which has room to wrap, so nothing is cut off at any screen size and the
+             grid never needs horizontal scrolling. -->
+        <div v-else-if="viewMode === 'calendar'">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3 sm:px-4">
+            <div class="flex items-center gap-1 sm:gap-2">
+              <!-- RTL: the past is on the right, so "previous" points right and "next" points left -->
               <Button
                 variant="ghost"
                 size="icon"
@@ -1304,7 +1349,7 @@
                 aria-label="ماه قبل"
                 @click="changeCalendarMonth(-1)"
               >
-                <Icon name="lucide:chevron-left" class="size-4" />
+                <Icon name="lucide:chevron-right" class="size-4" />
               </Button>
               <Button
                 variant="ghost"
@@ -1313,103 +1358,340 @@
                 aria-label="ماه بعد"
                 @click="changeCalendarMonth(1)"
               >
-                <Icon name="lucide:chevron-right" class="size-4" />
+                <Icon name="lucide:chevron-left" class="size-4" />
               </Button>
-              <h3 class="ml-2 text-base font-semibold sm:text-lg">
+              <h3 class="min-w-24 px-1 text-center text-base font-semibold sm:text-lg">
                 {{ calendarMonthLabel }}
               </h3>
               <Button
                 variant="outline"
-                class="ml-2 h-8 rounded-md px-3 text-xs"
+                class="h-8 rounded-md px-3 text-xs"
                 @click="goToToday"
               >
                 امروز
               </Button>
             </div>
 
-            <div class="flex items-center gap-1 self-start rounded-md border bg-muted/30 p-1 sm:self-auto">
-              <Button
-                variant="secondary"
-                class="h-8 rounded px-3 text-xs"
+            <label class="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                v-model="showWeekends"
+                type="checkbox"
+                class="size-4 accent-primary"
               >
-                ماه
-              </Button>
-              <Button
-                variant="ghost"
-                class="h-8 rounded px-3 text-xs text-muted-foreground"
-              >
-                هفته
-              </Button>
-              <label class="ml-2 flex items-center gap-2 px-2 text-xs text-muted-foreground">
-                <input
-                  v-model="showWeekends"
-                  type="checkbox"
-                  class="size-4 accent-primary"
-                >
-                نمایش جمعه
-              </label>
+              نمایش جمعه
+            </label>
+          </div>
+
+          <div :class="['grid border-b bg-muted/20', showWeekends ? 'grid-cols-7' : 'grid-cols-6']">
+            <div
+              v-for="(day, index) in visibleWeekdays"
+              :key="day"
+              class="min-w-0 px-1 py-2 text-center text-[11px] font-semibold text-muted-foreground sm:px-3 sm:text-start sm:text-xs"
+            >
+              <span class="sm:hidden">{{ shortWeekdays[index] }}</span>
+              <span class="hidden sm:inline">{{ day }}</span>
             </div>
           </div>
 
-          <div class="overflow-x-auto">
-            <div class="min-w-[40rem]">
-              <div :class="['grid border-b bg-muted/20', showWeekends ? 'grid-cols-7' : 'grid-cols-6']">
-                <div
-                  v-for="day in visibleWeekdays"
-                  :key="day"
-                  class="border-r px-3 py-2 text-xs font-semibold text-muted-foreground last:border-r-0"
-                >
-                  {{ day }}
-                </div>
-              </div>
-
-              <div
+          <div :class="['grid gap-px bg-border', showWeekends ? 'grid-cols-7' : 'grid-cols-6']">
+            <button
+              v-for="day in calendarDays"
+              :key="day.date"
+              type="button"
+              :aria-label="`${day.dayNumber} - ${day.items.length} مورد`"
+              :aria-pressed="selectedDate === day.date"
+              :class="[
+                'flex min-h-16 min-w-0 flex-col items-stretch gap-1 bg-background p-1 text-start transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-24 sm:p-2 lg:min-h-32',
+                !day.isCurrentMonth && 'bg-muted/20 text-muted-foreground',
+                selectedDate === day.date && 'bg-primary/5 ring-2 ring-inset ring-primary',
+              ]"
+              @click="selectDay(day.date)"
+            >
+              <span
                 :class="[
-                  'grid gap-px bg-border',
-                  showWeekends ? 'grid-cols-7' : 'grid-cols-6',
+                  'flex size-6 items-center justify-center self-start rounded-full text-xs sm:size-7 sm:text-sm',
+                  day.isToday && 'bg-primary font-semibold text-primary-foreground',
                 ]"
               >
-                <div
-                  v-for="day in calendarDays"
-                  :key="day.date"
-                  :class="[
-                    'min-h-32 bg-background p-2 sm:min-h-40',
-                    !day.isCurrentMonth && 'bg-muted/20 text-muted-foreground',
-                  ]"
-                >
-                  <span
-                    :class="[
-                      'flex size-7 items-center justify-center rounded-full text-sm',
-                      day.isToday && 'bg-primary font-semibold text-primary-foreground',
-                    ]"
-                  >
-                    {{ day.dayNumber }}
-                  </span>
+                {{ day.dayNumber }}
+              </span>
 
-                  <div class="mt-2 space-y-1">
+              <!-- wide screens: short chips -->
+              <div class="hidden min-w-0 flex-col gap-1 md:flex">
+                <div
+                  v-for="item in day.items.slice(0, CALENDAR_CHIPS)"
+                  :key="`${item.task.id}-${item.upcoming}`"
+                  :class="[
+                    'flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] leading-5 text-foreground',
+                    item.upcoming ? 'border-dashed border-primary/50 bg-primary/5' : 'border-success/30 bg-success/10',
+                  ]"
+                  :title="item.task.description ? `${item.task.title} — ${item.task.description}` : item.task.title"
+                >
+                  <Icon
+                    v-if="item.upcoming"
+                    name="lucide:repeat"
+                    class="size-3 shrink-0 text-primary"
+                  />
+                  <span v-else class="size-1.5 shrink-0 rounded-full bg-success" />
+                  <span class="min-w-0 truncate">{{ item.task.title }}</span>
+                </div>
+                <span
+                  v-if="day.items.length > CALENDAR_CHIPS"
+                  class="px-1 text-[11px] font-medium text-primary"
+                >
+                  +{{ faNum(day.items.length - CALENDAR_CHIPS) }} مورد دیگر
+                </span>
+              </div>
+
+              <!-- phones / narrow: dots + count, details are in the agenda below -->
+              <div class="flex flex-wrap items-center gap-0.5 md:hidden">
+                <span
+                  v-for="item in day.items.slice(0, 3)"
+                  :key="`${item.task.id}-${item.upcoming}`"
+                  :class="['size-1.5 rounded-full', item.upcoming ? 'bg-primary/60' : 'bg-success']"
+                />
+                <span
+                  v-if="day.items.length > 3"
+                  class="text-[10px] leading-none text-muted-foreground"
+                >
+                  +{{ faNum(day.items.length - 3) }}
+                </span>
+              </div>
+            </button>
+          </div>
+
+          <div class="border-t bg-muted/10 p-3 sm:p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 class="text-sm font-semibold">
+                {{ selectedDateLabel }}
+              </h4>
+              <Badge variant="secondary">
+                {{ faNum(selectedItems.length) }} مورد
+              </Badge>
+            </div>
+
+            <ul v-if="selectedItems.length" class="grid gap-2 lg:grid-cols-2">
+              <li
+                v-for="item in selectedItems"
+                :key="`${item.task.id}-${item.upcoming}`"
+                class="min-w-0"
+              >
+                <button
+                  type="button"
+                  class="w-full min-w-0 rounded-xl border bg-background p-3 text-start transition-colors hover:border-primary/50 hover:bg-muted/20"
+                  @click="openTask(item.task.id, item.task.projectId)"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <TaskPriorityBadge :priority="item.task.priority" />
+                    <TaskStatusBadge :status="item.task.status" />
+                    <Badge v-if="item.upcoming" variant="outline" class="gap-1 text-[10px]">
+                      <Icon name="lucide:repeat" class="size-3" /> تکرار آینده
+                    </Badge>
+                  </div>
+                  <p class="mt-2 break-words font-medium leading-6 [overflow-wrap:anywhere]">
+                    {{ item.task.title }}
+                  </p>
+                  <p
+                    v-if="item.task.description"
+                    class="mt-1 line-clamp-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
+                  >
+                    {{ item.task.description }}
+                  </p>
+                  <p class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span class="break-words [overflow-wrap:anywhere]">{{ getProjectName(item.task.projectId) }}</span>
+                    <span class="break-words [overflow-wrap:anywhere]">{{ getAssigneeNames(item.task) }}</span>
+                    <span class="whitespace-nowrap">{{ fmtDue(item.task) }}</span>
+                  </p>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              برای این روز موعدی ثبت نشده است.
+            </p>
+          </div>
+        </div>
+
+        <!-- ── Gantt: every task is a bar from its creation day to its due day ─────── -->
+        <div v-else>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-3 sm:px-4">
+            <div class="flex items-center gap-1 sm:gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                class="size-8"
+                aria-label="بازه قبل"
+                @click="changeCalendarMonth(-ganttSpan)"
+              >
+                <Icon name="lucide:chevron-right" class="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="size-8"
+                aria-label="بازه بعد"
+                @click="changeCalendarMonth(ganttSpan)"
+              >
+                <Icon name="lucide:chevron-left" class="size-4" />
+              </Button>
+              <h3 class="px-1 text-sm font-semibold sm:text-lg">
+                {{ ganttTitle }}
+              </h3>
+              <Button
+                variant="outline"
+                class="h-8 rounded-md px-3 text-xs"
+                @click="goToToday"
+              >
+                امروز
+              </Button>
+            </div>
+
+            <div class="flex items-center gap-1 rounded-md border bg-muted/30 p-1">
+              <Button
+                v-for="opt in ganttSpans"
+                :key="opt.value"
+                :variant="ganttSpan === opt.value ? 'secondary' : 'ghost'"
+                :class="['h-8 rounded px-3 text-xs', ganttSpan !== opt.value && 'text-muted-foreground']"
+                @click="ganttSpan = opt.value"
+              >
+                {{ opt.label }}
+              </Button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-3 py-2 text-xs text-muted-foreground sm:px-4">
+            <span v-for="legend in ganttLegend" :key="legend.label" class="flex items-center gap-1.5">
+              <span :class="['size-2.5 rounded-sm', legend.cls]" />{{ legend.label }}
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="size-2.5 rounded-sm ring-2 ring-destructive" />دارای تأخیر
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="h-3 w-0.5 bg-primary" />امروز
+            </span>
+          </div>
+
+          <div
+            v-if="ganttRows.length"
+            class="max-h-[70vh] overflow-auto"
+          >
+            <div
+              class="relative w-max min-w-full [--gl:8.5rem] sm:[--gl:14rem]"
+            >
+              <!-- header: months + days -->
+              <div class="sticky top-0 z-30 flex border-b bg-background">
+                <div
+                  class="sticky start-0 z-30 flex shrink-0 items-end border-e bg-background px-3 pb-2 text-xs font-semibold text-muted-foreground"
+                  style="width: var(--gl)"
+                >
+                  امور محوله
+                </div>
+                <div class="shrink-0" :style="{ width: `${ganttWidth}px` }">
+                  <div class="flex border-b">
                     <div
-                      v-for="task in day.tasks"
-                      :key="task.id"
-                      class="truncate rounded-md border border-success/30 bg-success/10 px-2 py-1 text-xs text-foreground"
-                      :title="task.title"
+                      v-for="m in ganttMonths"
+                      :key="m.key"
+                      class="truncate border-e px-1 py-1 text-center text-xs font-semibold"
+                      :style="{ width: `${m.days * ganttDayPx}px` }"
                     >
-                      <span class="mr-1 inline-block size-2 rounded-full bg-success" />
-                      {{ task.title }}
+                      {{ m.title }}
                     </div>
+                  </div>
+                  <div class="flex">
                     <div
-                      v-for="task in day.upcoming"
-                      :key="`${task.id}-${day.date}`"
-                      class="truncate rounded-md border border-dashed border-primary/50 bg-primary/5 px-2 py-1 text-xs text-foreground"
-                      :title="`${task.title} (تکرار آینده)`"
+                      v-for="d in ganttDays"
+                      :key="d.iso"
+                      :class="[
+                        'flex h-6 shrink-0 items-center justify-center text-[10px]',
+                        d.isFriday && 'bg-muted/50 text-muted-foreground',
+                        d.isToday && 'font-bold text-primary',
+                      ]"
+                      :style="{ width: `${ganttDayPx}px` }"
                     >
-                      <Icon name="lucide:repeat" class="mr-1 inline-block size-3 text-primary" />
-                      {{ task.title }}
+                      {{ ganttDayPx >= 24 || d.jd === 1 || d.jd % 5 === 0 ? d.label : '' }}
                     </div>
                   </div>
                 </div>
               </div>
+
+              <!-- grid lines, Fridays and the today line, drawn once behind every row -->
+              <div
+                class="pointer-events-none absolute inset-y-0 z-0"
+                :style="{
+                  insetInlineStart: 'var(--gl)',
+                  width: `${ganttWidth}px`,
+                  backgroundImage: `repeating-linear-gradient(to left, transparent 0, transparent ${ganttDayPx - 1}px, rgba(128,128,128,0.18) ${ganttDayPx - 1}px, rgba(128,128,128,0.18) ${ganttDayPx}px)`,
+                }"
+              >
+                <div
+                  v-for="d in ganttFridays"
+                  :key="d.iso"
+                  class="absolute inset-y-0 bg-muted/40"
+                  :style="{ insetInlineStart: `${d.index * ganttDayPx}px`, width: `${ganttDayPx}px` }"
+                />
+                <div
+                  v-if="ganttTodayIndex >= 0"
+                  class="absolute inset-y-0 z-10 w-0.5 bg-primary/70"
+                  :style="{ insetInlineStart: `${ganttTodayIndex * ganttDayPx + ganttDayPx / 2 - 1}px` }"
+                />
+              </div>
+
+              <!-- rows -->
+              <div
+                v-for="row in ganttRows"
+                :key="row.task.id"
+                class="relative z-10 flex h-11 border-b"
+              >
+                <button
+                  type="button"
+                  class="sticky start-0 z-20 flex min-w-0 shrink-0 flex-col justify-center border-e bg-background px-3 text-start hover:bg-muted/30"
+                  style="width: var(--gl)"
+                  :title="row.task.title"
+                  @click="openTask(row.task.id, row.task.projectId)"
+                >
+                  <span class="truncate text-sm font-medium">{{ row.task.title }}</span>
+                  <span class="truncate text-[11px] text-muted-foreground">{{ getProjectName(row.task.projectId) }} · {{ getAssigneeNames(row.task) }}</span>
+                </button>
+
+                <div class="relative shrink-0" :style="{ width: `${ganttWidth}px` }">
+                  <button
+                    type="button"
+                    :class="[
+                      'absolute top-1/2 flex h-6 -translate-y-1/2 items-center overflow-hidden px-1.5 text-[11px] font-medium text-white shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                      ganttBarClass(row.task.status),
+                      row.clippedStart ? 'rounded-s-none' : 'rounded-s-md',
+                      row.clippedEnd ? 'rounded-e-none' : 'rounded-e-md',
+                      row.overdue && 'ring-2 ring-destructive',
+                    ]"
+                    :style="{ insetInlineStart: `${row.offset * ganttDayPx}px`, width: `${Math.max(row.length * ganttDayPx, 8)}px` }"
+                    :title="`${row.task.title}\n${fmtJalali(row.startIso)} تا ${fmtJalali(row.endIso)}\nپیشرفت: ${row.task.progress}٪`"
+                    @click="openTask(row.task.id, row.task.projectId)"
+                  >
+                    <span
+                      class="absolute inset-y-0 start-0 bg-black/20"
+                      :style="{ width: `${Math.min(100, Math.max(0, row.task.progress))}%` }"
+                    />
+                    <span v-if="row.length * ganttDayPx >= 48" class="relative">
+                      {{ faNum(row.task.progress) }}٪
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+
+          <p
+            v-else
+            class="p-10 text-center text-sm text-muted-foreground"
+          >
+            در این بازه کاری با موعد مشخص وجود ندارد.
+          </p>
+
+          <p
+            v-if="ganttNoDueCount"
+            class="border-t px-4 py-2 text-xs text-muted-foreground"
+          >
+            {{ faNum(ganttNoDueCount) }} کار بدون موعد در نمودار گانت نمایش داده نمی‌شود.
+          </p>
         </div>
       </Card>
     </section>
@@ -1427,51 +1709,6 @@
         :due-text="fmtDue"
         @export-excel="exportReport"
       />
-    </section>
-
-    <section
-      v-else-if="section === 'drafts'"
-      class="space-y-6"
-    >
-      <Card class="overflow-hidden p-0 shadow-none">
-        <div class="border-b p-4">
-          <h2 class="text-lg font-semibold">
-            پیش‌نویس‌ها
-          </h2>
-        </div>
-        <div class="space-y-3 p-4">
-          <div
-            v-for="task in drafts"
-            :key="task.id"
-            class="rounded-xl border bg-background p-4"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <p class="font-medium break-words [overflow-wrap:anywhere]">
-                  {{ task.title }}
-                </p>
-                <p class="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
-                  {{ task.description }}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                @click="publishTask(task.id)"
-              >
-                انتشار
-              </Button>
-            </div>
-          </div>
-
-          <div
-            v-if="!drafts.length"
-            class="rounded-xl border border-dashed border-border bg-background/50 p-6 text-center text-sm text-muted-foreground"
-          >
-            هنوز پیش‌نویسی وجود ندارد.
-          </div>
-        </div>
-      </Card>
     </section>
 
     <section
@@ -1543,7 +1780,7 @@ type Props = {
   projectId?: string
 }
 
-type TaskViewMode = 'list' | 'board' | 'calendar'
+type TaskViewMode = 'list' | 'board' | 'calendar' | 'gantt'
 
 const props = withDefaults(defineProps<Props>(), {
   section: 'workspace',
@@ -1559,6 +1796,7 @@ const viewModes: Array<{ value: TaskViewMode, label: string, icon: string }> = [
   { value: 'list', label: 'نمای شبکه‌ای', icon: 'lucide:layout-grid' },
   { value: 'board', label: 'نمای کانبان', icon: 'lucide:columns-3' },
   { value: 'calendar', label: 'نمای تقویم', icon: 'lucide:calendar-days' },
+  { value: 'gantt', label: 'نمای گانت', icon: 'lucide:gantt-chart' },
 ]
 
 const projectForm = reactive({
@@ -1605,10 +1843,6 @@ const sectionMap: Record<TaskSection, { title: string, description: string }> = 
     title: 'تحلیل‌ها',
     description: 'روند انجام کارها، وضعیت اولویت‌ها و سرعت پیشرفت.',
   },
-  'drafts': {
-    title: 'پیش‌نویس‌ها',
-    description: 'کارهایی که هنوز منتشر نشده‌اند.',
-  },
   'archives': {
     title: 'بایگانی',
     description: 'امور محوله تکمیل‌شده یا بایگانی‌شده برای مراجعه‌ی بعدی.',
@@ -1653,7 +1887,6 @@ const projectDetailTasks = computed<TaskEntity[]>(() => {
     return belongsToProject && matchesSearch
   })
 })
-const drafts = computed<TaskEntity[]>(() => store.getTasksForSection('drafts'))
 const archives = computed<TaskEntity[]>(() => store.getTasksForSection('archives'))
 const completedTasks = computed<number>(() => store.tasks.filter((task: TaskEntity) => task.status === 'done').length)
 const atRiskTasks = computed<number>(() => store.tasks.filter((task: TaskEntity) => task.priority === 'urgent' && task.status !== 'done').length)
@@ -1741,7 +1974,7 @@ const getAssigneeNames = (task: TaskEntity) =>
   task.assigneeIds.length ? task.assigneeIds.map(id => getUserName(id)).join('، ') : 'بدون مسئول'
 /** due date in Jalali (+ time, Tehran) */
 const fmtDue = (task: TaskEntity) => formatDueDateTime(task.dueDate, task.dueTime) || 'بدون موعد'
-/* ── department worklists: favourites (star), search / sort / filter, logo ── */
+/* ── department worklists: favourites (star), search / sort / filter, pictures ── */
 const prefs = useProjectPrefs()
 const projectSearchOpen = ref(false)
 const projectQuery = ref('')
@@ -1773,21 +2006,52 @@ const toggleProjectFavorite = (project: { id: string, name: string }) => {
 }
 const settingsOpen = ref(false)
 const settingsProject = ref<{ id: string, name: string } | null>(null)
-const logoInput = ref<HTMLInputElement | null>(null)
+const settingsEntity = computed(() => settingsProject.value ? store.getProjectById(settingsProject.value.id) : undefined)
 const openProjectSettings = (project: { id: string, name: string }) => {
   settingsProject.value = project
   settingsOpen.value = true
 }
-async function onLogoPicked(event: Event) {
+/* shared (server-side) pictures: everybody sees them, only the admin changes them */
+const pictures = useDepartmentPictures()
+const pictureKinds = [
+  { key: 'logo', label: 'تصویر کارتابل (لوگو)' },
+  { key: 'header', label: 'تصویر پس‌زمینه / هدر کارت' },
+] as const
+const pictureInput = ref<HTMLInputElement | null>(null)
+const pictureBusy = ref(false)
+let pickingKind: 'logo' | 'header' = 'logo'
+const pickPicture = (kind: 'logo' | 'header') => {
+  pickingKind = kind
+  pictureInput.value?.click()
+}
+async function onPicturePicked(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
   if (!file || !settingsProject.value) return
+  pictureBusy.value = true
   try {
-    await prefs.setLogo(settingsProject.value.id, file)
+    await pictures.setPicture(settingsProject.value.id, pickingKind, file)
+    notify.success('تصویر برای همه‌ی کاربران این واحد ذخیره شد')
   }
-  catch {
-    notify.error('این تصویر خوانده نشد؛ فایل دیگری انتخاب کنید.')
+  catch (err) {
+    notify.error(pictures.errorMessage(err, 'این تصویر ذخیره نشد؛ فایل دیگری انتخاب کنید.'))
+  }
+  finally {
+    pictureBusy.value = false
+  }
+}
+async function dropPicture(kind: 'logo' | 'header') {
+  if (!settingsProject.value) return
+  pictureBusy.value = true
+  try {
+    await pictures.removePicture(settingsProject.value.id, kind)
+  }
+  catch (err) {
+    notify.error(pictures.errorMessage(err, 'حذف تصویر انجام نشد.'))
+  }
+  finally {
+    pictureBusy.value = false
   }
 }
 const getProjectTaskCount = (projectId: string) => store.tasks.filter((task: TaskEntity) => task.projectId === projectId).length
@@ -2105,21 +2369,6 @@ const submitProject = async () => {
   })
 }
 
-const publishTask = async (taskId: string) => {
-  const task = store.tasks.find((item: TaskEntity) => item.id === taskId)
-  if (!task) {
-    return
-  }
-
-  try {
-    await store.publishTask(taskId)
-    notify.success(`«${task.title}» منتشر شد`)
-  }
-  catch (err) {
-    notify.error(taskErrorMessage(err, 'انتشار امور محوله انجام نشد'))
-  }
-}
-
 const restoreTask = async (taskId: string) => {
   const task = store.tasks.find((item: TaskEntity) => item.id === taskId)
   if (!task) {
@@ -2155,18 +2404,25 @@ const exportReport = () => {
 
 const calendarWeekdays = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
 const visibleWeekdays = computed(() => (showWeekends.value ? calendarWeekdays : calendarWeekdays.slice(0, 6)))
+const shortWeekdays = computed(() => (showWeekends.value ? JALALI_WEEKDAYS : JALALI_WEEKDAYS.slice(0, 6)))
+/** how many title chips one day cell shows on wide screens; the rest collapse into "+N" (the agenda lists all) */
+const CALENDAR_CHIPS = 2
 
 // The calendar works on Jalali months. `calendarMonth` = the month on screen.
 const nowJ = isoToJalali(todayIso())!
 const calendarMonth = ref({ jy: nowJ.jy, jm: nowJ.jm })
 const calendarMonthLabel = computed(() => jalaliMonthTitle(calendarMonth.value.jy, calendarMonth.value.jm))
 
+type CalendarItem = { task: TaskEntity, upcoming: boolean }
+/** template helpers (Persian digits / Jalali date) */
+const faNum = (value: string | number) => toPersianDigits(value)
+const fmtJalali = (iso: string) => formatJalali(iso)
 const calendarDays = computed(() => {
   const { jy, jm } = calendarMonth.value
   const len = jalaliMonthLength(jy, jm)
   const first = jalaliWeekday(jy, jm, 1) // 0 = Saturday
   const today = todayIso()
-  const days: { date: string, dayNumber: string, isCurrentMonth: boolean, isToday: boolean, tasks: TaskEntity[], upcoming: TaskEntity[] }[] = []
+  const days: { date: string, dayNumber: string, isCurrentMonth: boolean, isToday: boolean, tasks: TaskEntity[], upcoming: TaskEntity[], items: CalendarItem[] }[] = []
   const rows = Math.ceil((first + len) / 7)
   // Future repeats of recurring tasks: the server only creates a copy when its day arrives, so every
   // later occurrence is projected here for the whole visible range (any month, any distance ahead).
@@ -2190,13 +2446,19 @@ const calendarDays = computed(() => {
     const base = new Date(Date.UTC(g.gy, g.gm - 1, g.gd + offset - 1))
     const iso = base.toISOString().slice(0, 10)
     const j = isoToJalali(iso)!
+    const dayTasks: TaskEntity[] = sectionTasks.value.filter((task: TaskEntity) => task.dueDate === iso)
+    const dayUpcoming = upcomingByDate.get(iso) ?? []
     days.push({
       date: iso,
       dayNumber: toPersianDigits(j.jd),
       isCurrentMonth: j.jy === jy && j.jm === jm,
       isToday: iso === today,
-      tasks: sectionTasks.value.filter((task: TaskEntity) => task.dueDate === iso),
-      upcoming: upcomingByDate.get(iso) ?? [],
+      tasks: dayTasks,
+      upcoming: dayUpcoming,
+      items: [
+        ...dayTasks.map(task => ({ task, upcoming: false })),
+        ...dayUpcoming.map(task => ({ task, upcoming: true })),
+      ],
     })
   }
   return days
@@ -2210,7 +2472,128 @@ const changeCalendarMonth = (amount: number) => {
 const goToToday = () => {
   const j = isoToJalali(todayIso())!
   calendarMonth.value = { jy: j.jy, jm: j.jm }
+  selectedDate.value = todayIso()
 }
+
+/* ── calendar agenda: everything due on the picked day, with room for full titles + descriptions ── */
+const selectedDate = ref(todayIso())
+const selectDay = (iso: string) => { selectedDate.value = iso }
+const selectedItems = computed<CalendarItem[]>(() => {
+  const iso = selectedDate.value
+  const items: CalendarItem[] = (sectionTasks.value as TaskEntity[])
+    .filter(task => task.dueDate === iso)
+    .map(task => ({ task, upcoming: false }))
+  for (const t of sectionTasks.value as TaskEntity[]) {
+    if (!t.recurrence || t.recurrenceSourceId || t.isDraft || t.isArchived || !t.dueDate) continue
+    if (projectOccurrences(t, iso, iso).length) items.push({ task: t, upcoming: true })
+  }
+  return items
+})
+const selectedDateLabel = computed(() => {
+  const j = isoToJalali(selectedDate.value)
+  if (!j) return ''
+  return `${calendarWeekdays[jalaliWeekday(j.jy, j.jm, j.jd)]} ${toPersianDigits(j.jd)} ${JALALI_MONTHS[j.jm - 1]} ${toPersianDigits(j.jy)}`
+})
+
+/* ── Gantt: bar = creation day (Tehran) -> due day, on a Jalali-month axis ── */
+const ganttSpans = [
+  { value: 1, label: 'یک ماه' },
+  { value: 3, label: 'سه ماه' },
+] as const
+const ganttSpan = ref<1 | 3>(1)
+const ganttDayPx = computed(() => (ganttSpan.value === 1 ? 32 : 14))
+const ganttLegend = [
+  { label: 'در انتظار انجام', cls: 'bg-slate-400' },
+  { label: 'در حال انجام', cls: 'bg-primary' },
+  { label: 'درخواست تأیید', cls: 'bg-amber-500' },
+  { label: 'انجام‌شده', cls: 'bg-success' },
+]
+const ganttBarClass = (status: string) => ({
+  'todo': 'bg-slate-400',
+  'in-progress': 'bg-primary',
+  'review': 'bg-amber-500',
+  'done': 'bg-success',
+} as Record<string, string>)[status] ?? 'bg-slate-400'
+
+const isoDayNumber = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return Math.round(Date.UTC(y!, m! - 1, d!) / 86400000)
+}
+const isoFromDayNumber = (n: number) => new Date(n * 86400000).toISOString().slice(0, 10)
+
+const ganttRange = computed(() => {
+  const { jy, jm } = calendarMonth.value
+  const last = jy * 12 + (jm - 1) + ganttSpan.value - 1
+  const ey = Math.floor(last / 12)
+  const em = last % 12 + 1
+  return {
+    start: isoDayNumber(jalaliToIso(jy, jm, 1)),
+    end: isoDayNumber(jalaliToIso(ey, em, jalaliMonthLength(ey, em))),
+    endYear: ey,
+    endMonth: em,
+  }
+})
+const ganttTitle = computed(() => {
+  const { jy, jm } = calendarMonth.value
+  const { endYear, endMonth } = ganttRange.value
+  return ganttSpan.value === 1
+    ? jalaliMonthTitle(jy, jm)
+    : `${jalaliMonthTitle(jy, jm)} تا ${jalaliMonthTitle(endYear, endMonth)}`
+})
+const ganttDays = computed(() => {
+  const today = todayIso()
+  const out: { iso: string, jd: number, label: string, jy: number, jm: number, isFriday: boolean, isToday: boolean }[] = []
+  for (let n = ganttRange.value.start; n <= ganttRange.value.end; n += 1) {
+    const iso = isoFromDayNumber(n)
+    const j = isoToJalali(iso)!
+    out.push({
+      iso, jd: j.jd, label: toPersianDigits(j.jd), jy: j.jy, jm: j.jm,
+      isFriday: jalaliWeekday(j.jy, j.jm, j.jd) === 6, isToday: iso === today,
+    })
+  }
+  return out
+})
+const ganttWidth = computed(() => ganttDays.value.length * ganttDayPx.value)
+const ganttMonths = computed(() => {
+  const groups: { key: string, title: string, days: number }[] = []
+  for (const d of ganttDays.value) {
+    const key = `${d.jy}-${d.jm}`
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.days += 1
+    else groups.push({ key, title: jalaliMonthTitle(d.jy, d.jm), days: 1 })
+  }
+  return groups
+})
+const ganttFridays = computed(() => ganttDays.value.map((d, index) => ({ ...d, index })).filter(d => d.isFriday))
+const ganttTodayIndex = computed(() => ganttDays.value.findIndex(d => d.isToday))
+
+const ganttRows = computed(() => {
+  const { start: rs, end: re } = ganttRange.value
+  const today = todayIso()
+  const rows: {
+    task: TaskEntity, startIso: string, endIso: string, offset: number, length: number,
+    clippedStart: boolean, clippedEnd: boolean, overdue: boolean
+  }[] = []
+  for (const task of sectionTasks.value as TaskEntity[]) {
+    if (!task.dueDate) continue
+    const created = task.createdAt ? tehranDay(task.createdAt) : task.dueDate
+    // a task created after its own deadline (back-dated) is drawn as a bar that ends on the deadline
+    const startIso = created && created <= task.dueDate ? created : task.dueDate
+    const s = isoDayNumber(startIso)
+    const e = isoDayNumber(task.dueDate)
+    if (s > re || e < rs) continue
+    const from = Math.max(s, rs)
+    const to = Math.min(e, re)
+    rows.push({
+      task, startIso, endIso: task.dueDate,
+      offset: from - rs, length: to - from + 1,
+      clippedStart: s < rs, clippedEnd: e > re,
+      overdue: task.status !== 'done' && task.dueDate < today,
+    })
+  }
+  return rows.sort((a, b) => a.startIso.localeCompare(b.startIso) || a.endIso.localeCompare(b.endIso))
+})
+const ganttNoDueCount = computed(() => (sectionTasks.value as TaskEntity[]).filter(task => !task.dueDate).length)
 
 usePageSeoMeta({ title: 'مدیریت امور محوله' })
 </script>

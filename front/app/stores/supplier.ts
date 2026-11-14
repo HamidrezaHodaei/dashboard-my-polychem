@@ -110,6 +110,8 @@ export const useSupplierStore = defineStore('suppliers', () => {
   const categories = ref<string[]>([])
   const categoryItems = ref<CategoryItem[]>([])
   const total = ref(0)
+  /** Headline counts over ALL suppliers (server-side), independent of the table's page / filters. */
+  const stats = ref({ total: 0, active: 0, semi_active: 0, inactive: 0 })
   const page = ref(1)
   const perPage = ref(20)
   const loading = ref(false)
@@ -146,6 +148,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
       if (id !== requestId) return
       suppliers.value = res.items
       total.value = res.total
+      void loadStats()
     }
     catch (err) {
       if (id !== requestId) return
@@ -160,6 +163,13 @@ export const useSupplierStore = defineStore('suppliers', () => {
     finally {
       if (id === requestId) loading.value = false
     }
+  }
+
+  async function loadStats() {
+    try {
+      stats.value = await apiFetch<typeof stats.value>('/suppliers/stats')
+    }
+    catch { /* keep the last known numbers; the table shows its own error */ }
   }
 
   async function loadCategories() {
@@ -243,6 +253,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     const updated = await apiFetch<Supplier>(`/suppliers/${id}`, { method: 'PATCH', body: changes })
     const i = suppliers.value.findIndex(s => s.id === id)
     if (i >= 0) suppliers.value[i] = updated
+    void loadStats()
     return updated
   }
 
@@ -250,6 +261,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     const updated = await apiFetch<Supplier>(`/suppliers/${id}`, { method: 'PATCH', body: changes })
     const i = suppliers.value.findIndex(s => s.id === id)
     if (i >= 0) suppliers.value[i] = updated
+    void loadStats()
     return updated
   }
 
@@ -290,6 +302,7 @@ export const useSupplierStore = defineStore('suppliers', () => {
     const created = await apiFetch<Supplier>('/suppliers', { method: 'POST', body })
     suppliers.value.unshift(created)
     total.value += 1
+    void loadStats()
     if (created.category && !categories.value.includes(created.category)) categories.value.push(created.category)
     return created
   }
@@ -298,10 +311,11 @@ export const useSupplierStore = defineStore('suppliers', () => {
     await apiFetch(`/suppliers/${id}`, { method: 'DELETE' })
     suppliers.value = suppliers.value.filter(s => s.id !== id)
     total.value = Math.max(0, total.value - 1)
+    void loadStats()
   }
 
   return {
-    suppliers, categories, categoryItems, total, page, perPage, loading, loadError, filters,
+    suppliers, categories, categoryItems, total, stats, loadStats, page, perPage, loading, loadError, filters,
     canCreate, canUpdate, canDelete, canExport, exportFile,
     finalizeSupplier, requestChange, decideRequest, fetchOne,
     load, loadCategories, loadCategoryItems, addCategory, updateCategory, removeCategory,

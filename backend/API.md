@@ -80,3 +80,13 @@ Not introduced yet (single internal frontend, single backend team) — routes st
 | GET | `/api/core/roles?include_inactive=true` | list incl. deactivated roles |
 
 Merge rules: see AUTHORIZATION.md §11 (DENY > direct ALLOW > role grants; roles are unioned).
+
+## Request samples — shipping, delivery and daily reminders
+
+* `POST /api/crm/request-samples/<id>/dispatches` — step «ثبت اطلاعات ارسال». With `all_shipped: true` the request becomes **DISPATCHED** («ارسال‌شده»); with `false` it stays APPROVED.
+* `POST /api/crm/request-samples/<id>/delivery` `{delivered_date, received_by?, note?}` — customer received the sample: DISPATCHED → AWAITING_FEEDBACK (follow-up phase). Replaces the old `await_feedback` transition.
+* Follow-ups and final feedback are accepted only after the receipt was confirmed.
+* Reminders (see `app/modules/request_samples/reminders.py`) are generated when the notification list is fetched, once per request / kind / day: `SAMPLE_REMIND_SHIP` (APPROVED), `SAMPLE_REMIND_DELIVER` (DISPATCHED), `SAMPLE_REMIND_FOLLOWUP` (no next follow-up date, or it passed), `SAMPLE_FOLLOWUP_DUE` (once, on the planned date).
+* `GET /api/crm/request-samples/option-items` — consumed-product + grade pick-lists for the request form.
+* `GET /api/me` and the login response now include `roles` and `is_admin`.
+* Migration `a1c5e9d3b7f2` adds `delivered_at`, `delivery_received_by`, `delivery_note`.

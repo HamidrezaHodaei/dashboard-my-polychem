@@ -3,7 +3,7 @@ import { ApiError, apiFetch, apiFetchPage } from '~/services/backendApi'
 
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type TaskStatus = 'todo' | 'in-progress' | 'review' | 'done'
-export type TaskSection = 'workspace' | 'your-work' | 'project' | 'views' | 'analytics' | 'drafts' | 'archives'
+export type TaskSection = 'workspace' | 'your-work' | 'project' | 'views' | 'analytics' | 'archives'
 
 /** Repeat rule of a recurring task (months/years are Jalali). daily = DAY/1, weekly = WEEK/1, monthly = MONTH/1, yearly = YEAR/1; a manual span is any other interval. */
 export interface RecurrenceRule { unit: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR', interval: number, end_date: string | null, next_date?: string | null }
@@ -19,6 +19,11 @@ export interface ProjectEntity {
   leadId: string
   description: string
   accent: 'blue' | 'green' | 'indigo' | 'slate'
+  /** Shared worklist pictures (set by an admin, same for every user of the unit). */
+  hasLogo: boolean
+  hasHeader: boolean
+  /** Grows on every change of either picture -- the cache key of the downloaded bytes. */
+  brandingVersion: number
 }
 
 export interface UserEntity {
@@ -91,7 +96,7 @@ interface BackendTask {
 
 interface TaskMeta {
   me: { id: number, full_name: string, department_id: number | null }
-  departments: { id: number, name: string, organization_id: number }[]
+  departments: { id: number, name: string, organization_id: number, has_logo?: boolean, has_header?: boolean, branding_version?: number }[]
   teams: { id: number, name: string, department_id: number }[]
   assignable_users: { id: number, full_name: string, email: string, department_id: number | null }[]
   /** Who the actor may (re)assign an EXISTING task to -- can differ from
@@ -195,6 +200,9 @@ export const useTaskWorkspaceStore = defineStore('task-workspace', () => {
       leadId: '',
       description: 'کارها و وضعیت پیشرفت این واحد.',
       accent: accents[i % accents.length]!,
+      hasLogo: Boolean(d.has_logo),
+      hasHeader: Boolean(d.has_header),
+      brandingVersion: d.branding_version ?? 0,
     }))
     teams.value = meta.teams.map(t => ({ id: String(t.id), name: t.name, departmentId: String(t.department_id) }))
     const list = meta.assignable_users.map(u => ({
@@ -220,6 +228,15 @@ export const useTaskWorkspaceStore = defineStore('task-workspace', () => {
       assignList.unshift({ id: meId.value, name: meta.me.full_name, email: '', teamId: null, departmentId: meta.me.department_id ? String(meta.me.department_id) : null })
     }
     assignUsers.value = assignList
+  }
+
+  /** Applies the server's answer after an admin changed / removed a picture (so the UI updates at once). */
+  function applyProjectBranding(projectId: string, b: { has_logo: boolean, has_header: boolean, branding_version: number }) {
+    const project = projects.value.find(p => p.id === projectId)
+    if (!project) return
+    project.hasLogo = b.has_logo
+    project.hasHeader = b.has_header
+    project.brandingVersion = b.branding_version
   }
 
   async function load() {
@@ -302,8 +319,6 @@ export const useTaskWorkspaceStore = defineStore('task-workspace', () => {
         return filteredTasks.value.filter(task => !task.isArchived)
       case 'analytics':
         return filteredTasks.value.filter(task => !task.isDraft)
-      case 'drafts':
-        return filteredTasks.value.filter(task => task.isDraft)
       case 'archives':
         return filteredTasks.value.filter(task => task.isArchived)
       default:
@@ -408,7 +423,6 @@ export const useTaskWorkspaceStore = defineStore('task-workspace', () => {
     isAssignee(task) ? ['review'] : [...statusOrder]
 
   const updateTaskStatus = (taskId: string, nextStatus: TaskStatus) => updateTask(taskId, { status: nextStatus })
-  const publishTask = (taskId: string) => updateTask(taskId, { isDraft: false })
   const restoreTask = (taskId: string) => updateTask(taskId, { isArchived: false })
 
   async function createTask(payload: Partial<TaskEntity> & { title: string, assigneeId: string, projectId: string }) {
@@ -457,12 +471,12 @@ export const useTaskWorkspaceStore = defineStore('task-workspace', () => {
   }
 
   return {
-    workspace, users, assignUsers, teams, projects, views, tasks, filters, selectedProjectId, activeSection,
+    workspace, users, assignUsers, teams, projects, views, tasks, filters, selectedProjectId, activeSection, applyProjectBranding,
     meId, loaded, loading, loadError, permissions, canManageRules, isAdmin,
     allTaskStatuses, filteredTasks,
     load, ensureLoaded, reset,
     getTasksForSection, getSummaryCards, getProjectById, getUserById, usersForProject, usersForAssign, isAssignee, isAssignedToMe, canManageTask, canEditTask, allowedStatuses,
-    updateTaskStatus, updateTask, referTask, removeTask, createTask, createProject, publishTask, restoreTask,
+    updateTaskStatus, updateTask, referTask, removeTask, createTask, createProject, restoreTask,
     setActiveSection, resetFilters,
   }
 })

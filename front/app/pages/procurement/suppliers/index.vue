@@ -21,22 +21,22 @@
     <div class="grid gap-4 sm:grid-cols-4">
       <AccessStat
         label="تعداد کل تأمین‌کنندگان"
-        :value="store.total"
+        :value="store.stats.total"
         icon="lucide:truck"
       />
       <AccessStat
         label="فعال"
-        :value="countByStatus('ACTIVE')"
+        :value="store.stats.active"
         icon="lucide:badge-check"
       />
       <AccessStat
         label="نیمه‌فعال"
-        :value="countByStatus('SEMI_ACTIVE')"
+        :value="store.stats.semi_active"
         icon="lucide:timer"
       />
       <AccessStat
         label="غیرفعال"
-        :value="countByStatus('INACTIVE')"
+        :value="store.stats.inactive"
         icon="lucide:ban"
       />
     </div>
@@ -1148,10 +1148,6 @@ async function runExport(format: 'xlsx' | 'docx') {
   }
 }
 const pageCount = computed(() => Math.max(1, Math.ceil(store.total / store.perPage)))
-
-function countByStatus(status: SupplierStatus) {
-  return store.suppliers.filter(s => s.status === status).length
-}
 
 const statusLabel: Record<string, string> = { ACTIVE: 'فعال', SEMI_ACTIVE: 'نیمه‌فعال', INACTIVE: 'غیرفعال' }
 const qualityLabel: Record<string, string> = { EXCELLENT: 'عالی', MEDIUM: 'متوسط', WEAK: 'ضعیف' }

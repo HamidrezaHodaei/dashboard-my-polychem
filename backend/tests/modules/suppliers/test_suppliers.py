@@ -461,3 +461,19 @@ def test_bank_accounts_are_not_written_to_the_audit_log_values(client, app, uplo
         assert logs
         assert all(card not in str(l.event_metadata) for l in logs)  # only field NAMES are logged
         assert any("bank_accounts" in l.event_metadata["changed_fields"] for l in logs)
+
+
+def test_stats_count_every_supplier_not_just_one_page(client, app):
+    from app.modules.suppliers.models import Supplier, SupplierStatus
+
+    with app.app_context():
+        user = make_user()
+        _grant(user, "procurement.supplier.read")
+        for i, st in enumerate([SupplierStatus.ACTIVE] * 3 + [SupplierStatus.SEMI_ACTIVE] * 2 + [SupplierStatus.INACTIVE]):
+            sup = Supplier(company_name=f"s{i}", supplier_type="LEGAL", status=st)
+            db.session.add(sup)
+        db.session.commit()
+        headers = auth_headers(user)
+    r = client.get("/api/suppliers/stats", headers=headers)
+    assert r.status_code == 200
+    assert r.get_json()["data"] == {"total": 6, "active": 3, "semi_active": 2, "inactive": 1}

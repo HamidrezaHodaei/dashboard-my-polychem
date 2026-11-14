@@ -106,6 +106,43 @@ def test_customer_picker_reads_the_bank(client, h, world):
     assert names == ["پلاستیک آلفا"]
 
 
+def _individual(**over):
+    c = Customer(customer_type=CustomerType.INDIVIDUAL, first_name="علی", last_name="رضایی",
+                 brand_name="پلی‌کم", factory_province="تهران", category="پلاستیک", **over)
+    db.session.add(c)
+    db.session.commit()
+    return c.id
+
+
+def test_individual_customer_is_found_by_person_name_full_name_or_brand(client, h, world):
+    cid = _individual()
+    for term in ("رضایی", "علی رضایی", "رضایی علی", "پلی‌کم", "پلی کم", "پلی"):
+        ids = [c["id"] for c in client.get(f"/api/crm/customers?search={term}", headers=h).get_json()["data"]]
+        assert cid in ids, term
+    ref = next(c for c in client.get("/api/crm/customers?search=پلی‌کم", headers=h).get_json()["data"] if c["id"] == cid)
+    assert ref["name"] == "علی رضایی" and ref["company"] == "پلی‌کم" and ref["label"] == "علی رضایی — پلی‌کم"
+    assert ref["customer_type"] == "INDIVIDUAL"
+
+
+def test_legal_customer_label_has_no_duplicate_company(client, h, world):
+    ref = client.get("/api/crm/customers?search=آلفا", headers=h).get_json()["data"][0]
+    assert ref["company"] is None and ref["label"] == ref["name"] == "پلاستیک آلفا"
+
+
+def test_sales_search_and_chart_show_company_next_to_individual(client, h, world):
+    cid = _individual()
+    r = client.post("/api/crm/sales", json={"customer_id": cid, "product_id": world["p"], "quantity_kg": 10,
+                                            "unit_price": 5, "date": "1405/05/10"}, headers=h)
+    assert r.status_code == 201, r.get_json()
+    _sale(client, h, world)  # another customer's sale must not match
+    rows = client.get("/api/crm/sales?search=پلی‌کم", headers=h).get_json()["data"]
+    rows = rows["items"] if isinstance(rows, dict) and "items" in rows else rows
+    assert [x["customer"]["id"] for x in rows] == [cid]
+    data = client.get("/api/crm/analytics", headers=h).get_json()["data"]
+    assert "علی رضایی — پلی‌کم" in [c["name"] for c in data["by_customer"]]
+    assert "پلاستیک آلفا" in [c["name"] for c in data["by_customer"]]
+
+
 # ── dates ────────────────────────────────────────────────────────────
 def test_jalali_and_gregorian_dates_are_the_same_day(client, h, world):
     j = _sale(client, h, world, date="1405/08/15")

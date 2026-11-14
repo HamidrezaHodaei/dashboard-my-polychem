@@ -181,6 +181,9 @@ _BUSINESS_RESOURCES = (
     # payment-method lists that feed them. Customers themselves stay under crm.customer.*.
     ("crm", "sale", True),
     ("crm", "product", True),
+    # Request Sample module (modules/request_samples): create / read / update / delete here; the
+    # workflow actions (approve, reject, dispatch, ...) are the non-delegable extras below.
+    ("crm", "request_sample", True),
     ("finance", "transaction", False),
     ("warehouse", "stock", True),
     ("website", "page", True),
@@ -243,6 +246,10 @@ EXTRA_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
     ("procurement", "supplier", "review"), ("procurement", "supplier", "export"),
     ("logistics", "company", "export"), ("logistics", "driver", "export"),
     ("crm", "sale", "export"), ("crm", "sale", "print"),
+    ("crm", "request_sample", "approve"), ("crm", "request_sample", "reject"),
+    ("crm", "request_sample", "dispatch"), ("crm", "request_sample", "follow_up"),
+    ("crm", "request_sample", "feedback"), ("crm", "request_sample", "convert"),
+    ("crm", "request_sample", "export"),
 )
 _EXTRA_DEFINITIONS: list[PermissionDefinition] = [
     PermissionDefinition(
@@ -297,6 +304,10 @@ MATRIX_MODULES: tuple[MatrixModule, ...] = (
     MatrixModule("crm.customer", "CRM", ("review", "export")),
     MatrixModule("crm.sale", "CRM Sales", ("export", "print")),
     MatrixModule("crm.product", "CRM Products"),
+    MatrixModule(
+        "crm.request_sample", "Request Sample",
+        ("approve", "reject", "dispatch", "follow_up", "feedback", "convert", "export"),
+    ),
     MatrixModule("finance.transaction", "Finance"),
     MatrixModule("warehouse.stock", "Warehouse"),
     MatrixModule("website.page", "Website"),

@@ -31,7 +31,7 @@
       class="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
     >
       <p v-if="loading" class="px-3 py-2 text-xs text-muted-foreground">در حال جستجو در بانک مشتریان...</p>
-      <p v-else-if="!results.length" class="px-3 py-2 text-xs text-muted-foreground">مشتری‌ای در بانک مشتریان پیدا نشد.</p>
+      <p v-else-if="!results.length" class="px-3 py-2 text-xs text-muted-foreground">مشتری‌ای با این نام، شرکت یا برند در بانک مشتریان پیدا نشد.</p>
       <button
         v-for="c in results"
         :key="c.id"
@@ -39,7 +39,7 @@
         class="flex w-full flex-col items-start rounded-md px-3 py-2 text-right text-sm hover:bg-accent"
         @click="choose(c)"
       >
-        <span dir="auto">{{ c.name }}</span>
+        <span dir="auto">{{ c.name }}<span v-if="c.company" class="text-muted-foreground"> — {{ c.company }}</span></span>
         <span v-if="c.province || c.industry" class="text-xs text-muted-foreground" dir="auto">
           {{ [c.province, c.industry].filter(Boolean).join(' · ') }}
         </span>
@@ -58,21 +58,22 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   clearable?: boolean
   invalid?: boolean
-}>(), { placeholder: 'جستجوی مشتری از بانک مشتریان...', clearable: true })
+}>(), { placeholder: 'جستجو با نام شخص، شرکت یا برند...', clearable: true })
 const emit = defineEmits<{ 'update:modelValue': [v: CrmCustomerRef | null] }>()
 
 const store = useCrmStore()
 const root = ref<HTMLElement | null>(null)
-const text = ref(props.modelValue?.name ?? '')
+const shown = (c: CrmCustomerRef | null | undefined) => (c ? (c.label || c.name) : '')
+const text = ref(shown(props.modelValue))
 const open = ref(false)
 const loading = ref(false)
 const results = ref<CrmCustomerRef[]>([])
 let seq = 0
 
-watch(() => props.modelValue, (v) => { text.value = v?.name ?? '' })
+watch(() => props.modelValue, (v) => { text.value = shown(v) })
 onClickOutside(root, () => {
   open.value = false
-  text.value = props.modelValue?.name ?? '' // typed-but-not-chosen text never counts as a customer
+  text.value = shown(props.modelValue) // typed-but-not-chosen text never counts as a customer
 })
 
 async function search() {
@@ -100,7 +101,7 @@ function onType() {
 }
 function choose(c: CrmCustomerRef) {
   emit('update:modelValue', c)
-  text.value = c.name
+  text.value = shown(c)
   open.value = false
 }
 function clear() {

@@ -22,6 +22,12 @@ const BASE_COLUMNS = [
 // Extra columns appear only when some row offers them (logistics rows add «بررسی» = approve / reject / suspend).
 const EXTRA_COLUMNS = [
   { action: 'review', label: 'بررسی' },
+  { action: 'approve', label: 'تأیید' },
+  { action: 'reject', label: 'رد' },
+  { action: 'dispatch', label: 'ارسال نمونه' },
+  { action: 'follow_up', label: 'پیگیری' },
+  { action: 'feedback', label: 'بازخورد' },
+  { action: 'convert', label: 'تبدیل به فروش' },
   { action: 'export', label: 'خروجی Excel/Word' },
   { action: 'print', label: 'چاپ' },
 ]

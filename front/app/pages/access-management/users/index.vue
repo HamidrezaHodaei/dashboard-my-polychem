@@ -175,6 +175,20 @@
                     </NuxtLink>
                   </Button>
                   <Button
+                    v-if="auth.isAdmin || auth.hasPermission('core.user.update')"
+                    variant="ghost"
+                    size="icon"
+                    title="تغییر رمز عبور"
+                    as-child
+                  >
+                    <NuxtLink :to="`/access-management/users/${user.id}?password=1`">
+                      <Icon
+                        name="lucide:lock-keyhole"
+                        class="size-4"
+                      />
+                    </NuxtLink>
+                  </Button>
+                  <Button
                     v-if="auth.hasPermission('core.user.update')"
                     variant="ghost"
                     size="icon"

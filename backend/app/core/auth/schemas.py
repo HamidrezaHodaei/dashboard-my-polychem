@@ -52,3 +52,7 @@ class UserPublic(BaseModel):
     department_id: int | None
     is_active: bool
     last_login_at: datetime | None
+    # The roles the user holds. The frontend derives `isAdmin` from this list (it gates the admin-only
+    # "change password" button in the user-management panel); the backend still enforces admin-only
+    # on POST /api/core/users/<id>/password itself.
+    roles: list[RoleRef] = Field(default_factory=list)

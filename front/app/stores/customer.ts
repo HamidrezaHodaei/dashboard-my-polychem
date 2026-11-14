@@ -291,8 +291,9 @@ export const useCustomerStore = defineStore('customers', () => {
   async function loadCategoryItems() {
     categoryItems.value = await apiFetch<CategoryItem[]>('/customers/category-items')
   }
-  async function loadOptionItems() {
-    try { optionItems.value = await apiFetch<OptionItem[]>('/customers/option-items') }
+  /** `forSamples` → read the lists through the request-sample permission (CONSUMED + GRADE only). */
+  async function loadOptionItems(forSamples = false) {
+    try { optionItems.value = await apiFetch<OptionItem[]>(forSamples ? '/crm/request-samples/option-items' : '/customers/option-items') }
     catch { optionItems.value = [] }
   }
   /** Rename / hide / reorder a product or grade name. A rename is also applied to existing customers by the server. */

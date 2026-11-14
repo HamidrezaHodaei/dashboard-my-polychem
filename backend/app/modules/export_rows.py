@@ -99,10 +99,34 @@ def sales_table(sales: list[dict]) -> tuple[str, list[str], list[list]]:
     rows = []
     for s in sales:
         rows.append([
-            s["date"], s["customer"]["name"], s["customer"].get("province") or "", s["product"]["name"],
+            s["date"], s["customer"].get("label") or s["customer"]["name"], s["customer"].get("province") or "", s["product"]["name"],
             s["net_quantity_kg"], s["unit_price"], s["net_amount"],
             "برگشت از فروش" if s["is_return"] else "فاکتور فروش", SALE_TYPE.get(s["sale_type"], ""),
             (s["payment_method"] or {}).get("name", ""), SALE_STATUS.get(s["status"], ""), s["description"] or "",
             s.get("created_by_name") or "", s.get("created_at_display") or "",
         ])
     return "گزارش فروش", headers, rows
+
+
+REQUEST_SAMPLE_STATUS = {
+    "DRAFT": "پیش‌نویس", "NEW_REQUEST": "درخواست جدید", "PENDING_APPROVAL": "در انتظار تأیید", "APPROVED": "تأیید شده",
+    "REJECTED": "رد شده", "ON_HOLD": "متوقف", "DISPATCHED": "ارسال شده", "AWAITING_FEEDBACK": "در انتظار بازخورد",
+    "COMPLETED": "تکمیل شده", "CONVERTED": "تبدیل به فروش", "CANCELLED": "لغو شده",
+}
+REQUEST_SAMPLE_PRIORITY = {"LOW": "کم", "NORMAL": "عادی", "HIGH": "زیاد", "URGENT": "فوری"}
+REQUEST_SAMPLE_FEEDBACK = {
+    "ACCEPTED": "تأیید شد", "REJECTED": "تأیید نشد", "ACCEPTED_WITH_CONDITIONS": "تأیید مشروط",
+    "UNDER_EVALUATION": "در حال بررسی", "NO_RESPONSE": "بدون پاسخ",
+}
+
+
+def request_samples_table(rows: list[dict]) -> tuple[str, list[str], list[list]]:
+    headers = ["شناسه", "مشتری", "محصول", "گرید", "مقدار نمونه", "تاریخ ثبت", "کارشناس فروش", "اولویت", "وضعیت",
+               "بازخورد مشتری", "شمارهٔ حواله", "ثبت‌کننده"]
+    data = [[
+        r["code"], r["customer"]["name"], r["product"] or "", r["grade"] or "", r["quantity_label"],
+        format_jalali(datetime.fromisoformat(r["requested_date"]).date()), r["sales_rep"]["name"] or "",
+        REQUEST_SAMPLE_PRIORITY.get(r["priority"], ""), REQUEST_SAMPLE_STATUS.get(r["status"], ""),
+        REQUEST_SAMPLE_FEEDBACK.get(r["feedback_status"] or "", ""), r["dispatch_ref_number"] or "", r["created_by_name"] or "",
+    ] for r in rows]
+    return "درخواست نمونه محصول", headers, data

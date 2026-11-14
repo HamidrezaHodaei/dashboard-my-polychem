@@ -221,6 +221,28 @@ def list_suppliers(
     return paginate_query(query, page, per_page)
 
 
+def supplier_stats(actor: User) -> dict:
+    """Headline counts for the suppliers page: every non-deleted supplier, grouped by status.
+
+    These are computed in the database over ALL suppliers -- they must not depend on the
+    page / filters of the table (the page used to count only the rows of the current page,
+    so \"active\" + \"inactive\" never matched the total)."""
+    from sqlalchemy import func
+
+    _require(actor, "read")
+    rows = (
+        db.session.query(Supplier.status, func.count(Supplier.id))
+        .filter(Supplier.deleted_at.is_(None))
+        .group_by(Supplier.status)
+        .all()
+    )
+    by_status = {(st.value if isinstance(st, SupplierStatus) else str(st)): int(n) for st, n in rows}
+    active = by_status.get(SupplierStatus.ACTIVE.value, 0)
+    semi = by_status.get(SupplierStatus.SEMI_ACTIVE.value, 0)
+    inactive = by_status.get(SupplierStatus.INACTIVE.value, 0)
+    return {"total": active + semi + inactive, "active": active, "semi_active": semi, "inactive": inactive}
+
+
 def list_categories(actor: User) -> list[str]:
     """Main-category names for the panel's filter dropdown: every managed main
     category plus any name still used by a supplier row (e.g. one an admin

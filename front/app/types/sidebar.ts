@@ -19,6 +19,8 @@ export interface SidebarItemGroup {
   children: SidebarItem[]
   activeRoute?: string | string[]
   icon?: string
+  /** Shown only to admins -- for sections no permission can be granted for (no backend module yet). */
+  adminOnly?: boolean
 }
 
 export interface SidebarItem {
@@ -26,8 +28,10 @@ export interface SidebarItem {
   link: NuxtLinkProps
   activeRoute?: string | string[]
   icon?: string
-  /** Hidden unless the user's /api/me/navigation contains this key. */
-  navKey?: string
+  /** Hidden unless the user's /api/me/navigation contains this key (any one of them, when an array). */
+  navKey?: string | string[]
+  /** Shown only to admins. */
+  adminOnly?: boolean
   badge?: {
     label: string
     variant?: BadgeVariants['variant']

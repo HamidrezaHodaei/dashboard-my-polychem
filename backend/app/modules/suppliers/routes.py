@@ -149,6 +149,13 @@ def export_suppliers():
     return send_export(request.args.get("format", "xlsx"), title=title, filename="suppliers", headers=headers, rows=rows)
 
 
+@bp.get("/stats")
+@require_authenticated
+def supplier_stats():
+    """Total / active / semi-active / inactive over ALL suppliers (not just the current page)."""
+    return success_response(data=services.supplier_stats(g.current_user))
+
+
 @bp.get("/categories")
 @require_authenticated
 def list_categories():

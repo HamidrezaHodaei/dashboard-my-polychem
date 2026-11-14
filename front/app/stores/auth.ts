@@ -14,6 +14,8 @@ export interface BackendUser {
   updated_at: string
   /** the roles the user holds (read-only for the user; only an admin changes them) */
   roles?: { name: string, display_name: string | null }[]
+  /** server-computed: holds the active `admin` role */
+  is_admin?: boolean
   /** profile photo as a small data URL, or null */
   avatar?: string | null
 }
@@ -46,7 +48,7 @@ export const useAuthStore = defineStore('auth', {
     isLoggedIn: state => !!state.user,
     permissionKeys: state => new Set(state.permissions.map(p => p.key)),
     navigationKeys: state => new Set(state.navigation.map(n => n.key)),
-    isAdmin: state => !!state.user?.roles?.some(r => r.name === 'admin'),
+    isAdmin: state => !!state.user?.is_admin || !!state.user?.roles?.some(r => r.name === 'admin'),
   },
   actions: {
     setAccessToken(token: string | null) {

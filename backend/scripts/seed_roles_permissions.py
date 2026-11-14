@@ -4,7 +4,7 @@ Phase 1 development seed script.
 Creates, idempotently:
     - the 16 initial system roles (IMPLEMENTATION_PLAN.md Phase 1)
     - the initial organizational structure: دفتر مرکزی / کارخانه
-      organizations; فروش, مالی, تدارکات, تولید, انبار, کنترل کیفیت,
+      organizations; بازاریابی و فروش, مالی, تدارکات, تولید, انبار, کنترل کیفیت,
       لجستیک departments; فروش داخلی team
     - exactly one seed-time grant: admin @ GLOBAL, per
       IMPLEMENTATION_PLAN.md Phase 1 ("no grants issued yet except
@@ -81,7 +81,7 @@ ORGANIZATIONS: list[tuple[str, str | None]] = [
 # under کارخانه — and should be reviewed/corrected by whoever owns the
 # real org chart before this is relied on beyond local development.
 DEPARTMENTS: list[tuple[str, str]] = [
-    ("فروش", "دفتر مرکزی"),
+    ("بازاریابی و فروش", "دفتر مرکزی"),
     ("مالی", "دفتر مرکزی"),
     ("تدارکات", "دفتر مرکزی"),
     ("لجستیک", "دفتر مرکزی"),
@@ -92,7 +92,7 @@ DEPARTMENTS: list[tuple[str, str]] = [
 
 # team name -> owning department name
 TEAMS: list[tuple[str, str]] = [
-    ("فروش داخلی", "فروش"),
+    ("فروش داخلی", "بازاریابی و فروش"),
 ]
 
 # DESIGN DECISION: the full permission registry is explicitly a Phase 2
@@ -153,8 +153,19 @@ def seed_organizations() -> dict[str, Organization]:
     return orgs_by_name
 
 
+# Former department titles -> current ones. A database seeded before the rename keeps its row
+# (same id) and just gets the new title, instead of a second department being created.
+LEGACY_DEPARTMENT_NAMES = {"فروش": "بازاریابی و فروش"}
+
+
 def seed_departments(orgs_by_name: dict[str, Organization]) -> dict[str, Department]:
     depts_by_name = {}
+    for old_name, new_name in LEGACY_DEPARTMENT_NAMES.items():
+        legacy = db.session.query(Department).filter_by(name=old_name).first()
+        if legacy is not None and not db.session.query(Department).filter_by(name=new_name).first():
+            legacy.name = new_name
+            db.session.flush()
+            print(f"  renamed department: {old_name} -> {new_name}")
     for name, org_name in DEPARTMENTS:
         organization = orgs_by_name[org_name]
         dept, created = get_or_create(
@@ -272,7 +283,7 @@ def seed_task_scoped_grants(
     Permission sets and scopes are taken verbatim from AUTHORIZATION.md
     §7's own Department Manager / Team Manager worked examples (not
     invented here):
-        مدیر فروش (sales_manager)   @ DEPARTMENT: فروش
+        مدیر فروش (sales_manager)   @ DEPARTMENT: بازاریابی و فروش
             tasks.task.create, tasks.task.assign, tasks.task.read,
             tasks.analytics.read
         (team lead)                 @ TEAM: فروش داخلی
@@ -291,7 +302,7 @@ def seed_task_scoped_grants(
     ]
     team_manager_permission_keys = ["tasks.task.create", "tasks.task.assign", "tasks.task.read"]
 
-    sales_dept = depts_by_name["فروش"]
+    sales_dept = depts_by_name["بازاریابی و فروش"]
     sales_internal_team = teams_by_name["فروش داخلی"]
 
     def _grant(role_name: str, permission_keys: list[str], scope_type: ScopeType, scope_id: int):

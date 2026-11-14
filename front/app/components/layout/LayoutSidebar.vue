@@ -54,37 +54,37 @@ const baseNav: SidebarProps['nav'] = [
       {
         title: 'کارها و وظایف من',
         icon: 'lucide:shopping-bag',
-        activeRoute: ['/tasks', '/tasks/your-work', '/tasks/project', '/tasks/views', '/tasks/analytics', '/tasks/drafts', '/tasks/archives'],
+        activeRoute: ['/tasks', '/tasks/your-work', '/tasks/project', '/tasks/views', '/tasks/analytics', '/tasks/archives'],
         children: [
           {
             title: 'فضای کاری',
             link: { to: '/tasks' },
             activeRoute: ['/tasks'],
+            navKey: 'tasks',
           },
           {
             title: 'کارتابل واحد',
             link: { to: '/tasks/project' },
             activeRoute: ['/tasks/project'],
+            navKey: 'tasks',
           },
           {
             title: 'نماها',
             link: { to: '/tasks/views' },
             activeRoute: ['/tasks/views'],
+            navKey: 'tasks',
           },
           {
             title: 'تحلیل‌ها',
             link: { to: '/tasks/analytics' },
             activeRoute: ['/tasks/analytics'],
-          },
-          {
-            title: 'پیش‌نویس‌ها',
-            link: { to: '/tasks/drafts' },
-            activeRoute: ['/tasks/drafts'],
+            navKey: 'task_analytics',
           },
           {
             title: 'بایگانی',
             link: { to: '/tasks/archives' },
             activeRoute: ['/tasks/archives'],
+            navKey: 'tasks',
           },
         ],
       },
@@ -96,12 +96,14 @@ const baseNav: SidebarProps['nav'] = [
           { title: 'داشبورد فروش', link: { to: '/crm/dashboard' }, navKey: 'crm_dashboard' },
           { title: 'بانک اطلاعات مشتریان', link: { to: '/crm/customers' }, navKey: 'customers' },
           { title: 'فروش‌ها', link: { to: '/crm/sales' }, navKey: 'crm_sales' },
+          { title: 'درخواست نمونه محصول', link: { to: '/crm/request-samples' }, navKey: 'request_samples' },
           { title: 'تنظیمات فروش', link: { to: '/crm/settings' }, navKey: 'crm_settings' },
         ],
       },
       {
         title: 'مالی',
         icon: 'lucide:landmark',
+        adminOnly: true,
         activeRoute: ['/finance'],
         children: [
           {
@@ -165,6 +167,7 @@ const baseNav: SidebarProps['nav'] = [
       {
         title: 'انبار',
         icon: 'lucide:warehouse',
+        adminOnly: true,
         children: [
           {
             title: 'پیشخوان',
@@ -219,6 +222,7 @@ const baseNav: SidebarProps['nav'] = [
       {
         title: 'پنل مشتریان',
         icon: 'lucide:panel-top',
+        adminOnly: true,
         children: [
           {
             title: 'پیشخوان',
@@ -249,6 +253,7 @@ const baseNav: SidebarProps['nav'] = [
       {
         title: 'مدیریت وب‌سایت',
         icon: 'lucide:globe',
+        adminOnly: true,
         children: [
           {
             title: 'آمار بازدیدکنندگان',
@@ -279,12 +284,14 @@ const baseNav: SidebarProps['nav'] = [
             link: {
               to: '/procurement/suppliers',
             },
+            navKey: 'suppliers',
           },
           {
             title: 'بانک اطلاعات لجستیک',
             link: {
               to: '/procurement/logistics',
             },
+            navKey: ['logistics_companies', 'logistics_drivers'],
           },
         ],
       },
@@ -297,30 +304,35 @@ const baseNav: SidebarProps['nav'] = [
             link: {
               to: '/access-management/users',
             },
+            navKey: 'users',
           },
           {
             title: 'نقش‌ها',
             link: {
               to: '/access-management/roles',
             },
+            navKey: 'roles',
           },
           {
             title: 'مجوزها',
             link: {
               to: '/access-management/permissions',
             },
+            navKey: 'permissions',
           },
           {
             title: 'سازمان‌ها',
             link: {
               to: '/access-management/organizations',
             },
+            navKey: 'organizations',
           },
           {
             title: 'تیم‌ها',
             link: {
               to: '/access-management/teams',
             },
+            navKey: 'teams',
           },
         ],
       },
@@ -357,6 +369,7 @@ const baseNav: SidebarProps['nav'] = [
       {
         title: 'احراز هویت',
         icon: 'lucide:lock',
+        adminOnly: true,
         children: [
           {
             title: 'ورود',
@@ -382,15 +395,26 @@ const baseNav: SidebarProps['nav'] = [
   },
 ]
 
-// Items carrying a `navKey` are shown only when the backend granted that navigation entry
-// (derived from the user's permissions, e.g. crm.sale.read -> crm_sales).
+// Menu visibility follows the user's access -- an entry the user may not open is not rendered at all:
+//  * `navKey`    -> shown only when the backend granted that navigation entry (derived from the user's
+//                   permissions, e.g. crm.sale.read -> crm_sales); an array means "any of these";
+//  * `adminOnly` -> sections no permission can be granted for (no backend module yet): admins only;
+//  * a parent whose children are all hidden is hidden too, and so is a group left without items.
+// The route guard (middleware/auth.global.ts) enforces the same rules for typed URLs.
 const auth = useAuthStore()
-const nav = computed<SidebarProps['nav']>(() => baseNav.map(group => ({
-  ...group,
-  items: group.items
-    .map(item => ('children' in item
-      ? { ...item, children: item.children.filter(c => !c.navKey || auth.navigationKeys.has(c.navKey)) }
-      : item))
-    .filter(item => !('children' in item) || item.children.length > 0),
-})))
+const keyVisible = (key?: string | string[]) => {
+  if (!key) return true
+  return (Array.isArray(key) ? key : [key]).some(k => auth.navigationKeys.has(k))
+}
+const nav = computed<SidebarProps['nav']>(() => baseNav
+  .map(group => ({
+    ...group,
+    items: group.items
+      .filter(item => !item.adminOnly || auth.isAdmin)
+      .map(item => ('children' in item
+        ? { ...item, children: item.children.filter(c => (!c.adminOnly || auth.isAdmin) && keyVisible(c.navKey)) }
+        : item))
+      .filter(item => 'children' in item ? item.children.length > 0 : keyVisible((item as { navKey?: string | string[] }).navKey)),
+  }))
+  .filter(group => group.items.length > 0))
 </script>

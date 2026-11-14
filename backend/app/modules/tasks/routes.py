@@ -2,6 +2,7 @@
 from flask import Blueprint, g, request, send_file
 
 from app.core.auth.decorators import require_authenticated
+from app.modules.tasks import branding
 from app.modules.tasks import rules as task_rules
 from app.modules.tasks import services
 from app.modules.tasks.models import TaskStatus
@@ -165,6 +166,33 @@ def list_assignments(task_id: int):
 def unassign_task(task_id: int, assignee_user_id: int):
     services.unassign_task(g.current_user, task_id, assignee_user_id, ip_address=request.remote_addr)
     return success_response(data={})
+
+
+# ---- department worklist pictures (logo / header) -- admin writes, unit members read ----
+@bp.get("/departments/<int:department_id>/branding/<kind>")
+@require_authenticated
+def get_department_picture(department_id: int, kind: str):
+    path, mimetype = branding.get_picture_for_view(g.current_user, department_id, kind)
+    response = send_file(path, mimetype=mimetype, as_attachment=False, max_age=0)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, no-cache"  # revalidated; the UI also keys by version
+    return response
+
+
+@bp.put("/departments/<int:department_id>/branding/<kind>")
+@require_authenticated
+def set_department_picture(department_id: int, kind: str):
+    data = branding.set_picture(
+        g.current_user, department_id, kind, request.files.get("file"), ip_address=request.remote_addr
+    )
+    return success_response(data=data)
+
+
+@bp.delete("/departments/<int:department_id>/branding/<kind>")
+@require_authenticated
+def delete_department_picture(department_id: int, kind: str):
+    data = branding.remove_picture(g.current_user, department_id, kind, ip_address=request.remote_addr)
+    return success_response(data=data)
 
 
 # ---- attachments (any number) -----------------------------------------

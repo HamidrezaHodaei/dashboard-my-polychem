@@ -82,6 +82,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.suppliers.routes import bp as suppliers_bp
     from app.modules.customers.routes import bp as customers_bp
     from app.modules.crm.routes import bp as crm_bp
+    from app.modules.request_samples.routes import bp as request_samples_bp
     from app.modules.logistics.routes import bp as logistics_bp
     from app.modules.notifications.routes import bp as notifications_bp
 
@@ -109,6 +110,8 @@ def _register_blueprints(app: Flask) -> None:
     # CRM — Sales module (sales documents, analytics, product catalogue). Customers come from
     # the customer bank above; nothing here owns a customer table.
     app.register_blueprint(crm_bp)
+    # CRM — Request Sample (sample requests: approval, dispatch, follow-ups, customer feedback).
+    app.register_blueprint(request_samples_bp)
 
     # Logistics — transport-company / driver registration module.
     app.register_blueprint(logistics_bp)

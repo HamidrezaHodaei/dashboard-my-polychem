@@ -69,7 +69,7 @@
                 <Icon
                   :name="iconFor(n.type)"
                   class="mt-0.5 size-5 shrink-0"
-                  :class="n.type === 'TASK_OVERDUE' ? 'text-destructive' : n.type === 'TASK_DUE_SOON' ? 'text-amber-500' : 'text-primary'"
+                  :class="iconColor(n.type)"
                   aria-hidden="true"
                 />
                 <span class="min-w-0 flex-1 text-right">
@@ -79,7 +79,7 @@
                   >{{ n.title }}</span>
                   <span
                     v-if="n.body"
-                    class="block text-sm leading-6"
+                    class="block whitespace-pre-line break-words text-sm leading-6"
                     dir="rtl"
                   >{{ n.body }}</span>
                   <span class="mt-1 flex items-center gap-x-1 text-xs text-muted-foreground">
@@ -162,7 +162,26 @@ const iconFor = (type: string) => ({
   REVIEW_RESUBMITTED: 'lucide:rotate-ccw',
   CHANGE_REQUEST: 'lucide:file-pen-line',
   REVIEW_REQUEST: 'lucide:inbox',
+  SAMPLE_SUBMITTED: 'lucide:flask-conical',
+  SAMPLE_APPROVED: 'lucide:check-circle-2',
+  SAMPLE_REJECTED: 'lucide:x-circle',
+  SAMPLE_ON_HOLD: 'lucide:pause-circle',
+  SAMPLE_DISPATCHED: 'lucide:truck',
+  SAMPLE_DELIVERED: 'lucide:package-check',
+  SAMPLE_REMIND_SHIP: 'lucide:package-open',
+  SAMPLE_REMIND_DELIVER: 'lucide:truck',
+  SAMPLE_REMIND_FOLLOWUP: 'lucide:phone-call',
+  SAMPLE_FOLLOWUP_DUE: 'lucide:calendar-clock',
+  SAMPLE_FEEDBACK: 'lucide:message-circle-heart',
+  CUSTOMER_FOLLOWUP_DUE: 'lucide:phone-call',
+  CUSTOMER_FOLLOWUP_OVERDUE: 'lucide:phone-missed',
 } as Record<string, string>)[type] ?? 'lucide:bell'
+
+const iconColor = (type: string) => (
+  type === 'TASK_OVERDUE' || type === 'CUSTOMER_FOLLOWUP_OVERDUE'
+    ? 'text-destructive'
+    : type === 'TASK_DUE_SOON' || type === 'CUSTOMER_FOLLOWUP_DUE' ? 'text-amber-500' : 'text-primary'
+)
 
 async function load(reset: boolean) {
   if (loading.value) return

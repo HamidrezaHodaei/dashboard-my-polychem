@@ -16,11 +16,16 @@ const ROUTE_NAVIGATION_KEYS: Record<string, string | string[]> = {
   '/crm/customers': 'customers',
   '/crm/sales': 'crm_sales',
   '/crm/dashboard': 'crm_dashboard',
+  '/crm/request-samples': 'request_samples',
   '/crm/settings': 'crm_settings',
   '/tasks': 'tasks',
   // Logistics database: a user needs access to at least one of the two applicant types.
   '/procurement/logistics': ['logistics_companies', 'logistics_drivers'],
 }
+
+// Sections with no backend permission to grant (placeholder modules) are admin-only -- the sidebar hides
+// them for everybody else, so typing the URL must not open them either.
+const ADMIN_ONLY_PREFIXES = ['/finance', '/inventory', '/customer-panel', '/website']
 
 function requiredNavigationKeyFor(path: string): string | string[] | null {
   // Longest-prefix match so `/tasks/analytics` doesn't fall through to
@@ -54,6 +59,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   if (!to.meta.guest && !authStore.isLoggedIn) {
     return navigateTo('/auth/signin')
+  }
+
+  if (!to.meta.guest && !authStore.isAdmin
+    && ADMIN_ONLY_PREFIXES.some(p => to.path === p || to.path.startsWith(`${p}/`))) {
+    return navigateTo('/403')
   }
 
   const requiredKey = requiredNavigationKeyFor(to.path)

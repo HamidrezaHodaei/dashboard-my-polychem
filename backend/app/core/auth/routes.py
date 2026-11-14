@@ -16,6 +16,9 @@ from flask import Blueprint, current_app, g, request
 from app.core.auth import services
 from app.core.auth.decorators import require_authenticated
 from app.core.auth.schemas import LoginRequest, UserPublic
+from app.core.roles.models import Role
+from app.core.authorization.models import UserRole
+from app.extensions import db
 from app.permissions.navigation import resolve_navigation
 from app.permissions.schemas import EffectivePermission, NavigationItem
 from app.permissions.service import summarize_effective_permissions
@@ -110,7 +113,7 @@ def login():
     response, status_code = success_response(
         data={
             "access_token": access_token,
-            "user": UserPublic.model_validate(user).model_dump(mode="json"),
+            "user": _public_user(user),
         }
     )
     _set_refresh_cookie(response, raw_refresh_token)
@@ -136,10 +139,24 @@ def logout():
     return response, status_code
 
 
+def _public_user(user) -> dict:
+    """UserPublic + the user's active roles (the UI uses them to show admin-only controls)."""
+    rows = (
+        db.session.query(Role.name, Role.display_name)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .filter(UserRole.user_id == user.id, Role.is_active.is_(True), Role.deleted_at.is_(None))
+        .order_by(Role.name).all()
+    )
+    data = UserPublic.model_validate(user).model_dump(mode="json")
+    data["roles"] = [{"name": n, "display_name": d} for n, d in rows]
+    data["is_admin"] = any(n == "admin" for n, _ in rows)
+    return data
+
+
 @bp.get("/me")
 @require_authenticated
 def me():
-    return success_response(data=UserPublic.model_validate(g.current_user).model_dump(mode="json"))
+    return success_response(data=_public_user(g.current_user))
 
 
 @bp.get("/me/permissions")

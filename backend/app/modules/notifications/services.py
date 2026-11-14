@@ -121,6 +121,18 @@ def list_for(user_id: int, *, limit: int = 30, only_unread: bool = False, before
         generate_deadline_notifications(user_id)
     except Exception:  # a warning must never break the bell
         db.session.rollback()
+    try:
+        from app.modules.request_samples import reminders  # local import: request_samples imports this module
+
+        reminders.generate_for(user_id)
+    except Exception:  # same rule for the sample reminders
+        db.session.rollback()
+    try:
+        from app.modules.customers import reminders as customer_reminders  # local import: avoids a cycle
+
+        customer_reminders.generate_for(user_id)
+    except Exception:  # same rule for the customer follow-up reminders
+        db.session.rollback()
     query = db.session.query(Notification).filter(Notification.user_id == user_id)
     if only_unread:
         query = query.filter(Notification.read_at.is_(None))

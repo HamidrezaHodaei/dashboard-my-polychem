@@ -70,7 +70,7 @@
             /> ویرایش
           </Button>
           <Button
-            v-if="auth.isAdmin && !isSelf"
+            v-if="canResetPassword"
             variant="outline"
             class="gap-2"
             @click="openPassword"
@@ -604,6 +604,9 @@ const roleToAssign = ref<string>('')
 
 const isSelf = computed(() => user.value?.id === auth.user?.id)
 const canUpdate = computed(() => auth.hasPermission('core.user.update'))
+// Shown to the admin (and to anyone who may edit users, so the control can never silently vanish if the
+// session payload lacks the role list); the server still answers 403 unless the caller is an admin.
+const canResetPassword = computed(() => auth.isAdmin || canUpdate.value)
 const canDelete = computed(() => auth.hasPermission('core.user.delete'))
 const canManagePermissions = computed(() => canUpdate.value && auth.hasPermission('core.permission.update'))
 
@@ -877,6 +880,10 @@ async function savePermissions() {
   }
 }
 
-onMounted(loadAll)
+onMounted(async () => {
+  await loadAll()
+  // deep link from the users list («تغییر رمز عبور»)
+  if (route.query.password && user.value && canResetPassword.value) openPassword()
+})
 usePageSeoMeta({ title: () => user.value?.full_name || 'کاربر' })
 </script>

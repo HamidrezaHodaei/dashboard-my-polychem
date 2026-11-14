@@ -25,6 +25,7 @@ from app.core.teams.models import Team, TeamMember
 from app.core.users.models import User
 from app.extensions import db
 from app.modules.notifications import services as notifications
+from app.modules.tasks import branding as task_branding
 from app.modules.tasks import files as task_files
 from app.modules.tasks import recurrence
 from app.modules.tasks import rules as task_rules
@@ -641,7 +642,8 @@ def task_meta(actor: User) -> dict:
     return {
         "me": {"id": actor.id, "full_name": actor.full_name, "department_id": actor.department_id},
         "departments": [
-            {"id": d.id, "name": d.name, "organization_id": d.organization_id} for d in departments
+            {"id": d.id, "name": d.name, "organization_id": d.organization_id, **task_branding.branding_payload(d)}
+            for d in departments
         ],
         "teams": [{"id": t.id, "name": t.name, "department_id": t.department_id} for t in teams],
         "assignable_users": _dump_users(create_users),

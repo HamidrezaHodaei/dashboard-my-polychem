@@ -77,6 +77,44 @@ def _escape_like(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+_FA_TO_AR = str.maketrans({"ی": "ي", "ک": "ك"})
+_TOKEN_SPLIT = re.compile(r"[\s\u200c\u200f\u200e]+")
+
+
+def _search_tokens(term: str | None) -> list[str]:
+    """Words of a search term. Whitespace AND ZWNJ both split, so 'پلی‌کم', 'پلی کم' and 'پلیکم'
+    style spellings all find the same row (each part is matched on its own)."""
+    return [t for t in _TOKEN_SPLIT.split((term or "").strip()) if t]
+
+
+def _token_like_variants(token: str) -> list[str]:
+    low = token.lower()
+    return [f"%{_escape_like(v)}%" for v in {low, low.translate(_AR_TO_FA), low.translate(_FA_TO_AR)}]
+
+
+def _tokens_match(term: str | None, columns):
+    """AND over the words of `term`; each word must occur in at least one of `columns`
+    (Persian/Arabic letter spellings both match). 'علی رضایی' therefore finds first_name='علی' +
+    last_name='رضایی', which a whole-string LIKE per column never could."""
+    tokens = _search_tokens(term)
+    if not tokens:
+        return None
+    clauses = []
+    for tok in tokens:
+        ors = []
+        for like in _token_like_variants(tok):
+            ors += [db.func.lower(db.func.coalesce(col, "")).like(like, escape="\\") for col in columns]
+        clauses.append(db.or_(*ors))
+    return db.and_(*clauses)
+
+
+def _customer_text_match(term: str):
+    """SQL condition: every word of `term` occurs in the customer's company / brand / first / last
+    name -- for an individual customer the brand (نام شرکت یا برند) is searchable exactly like the
+    person's own name. Shared by the sale customer picker and Request Sample search."""
+    return _tokens_match(term, (Customer.company_name, Customer.brand_name, Customer.first_name, Customer.last_name))
+
+
 def _customer_names(c: Customer) -> set[str]:
     names = {c.display_name, c.company_name, c.brand_name}
     if c.customer_type == CustomerType.INDIVIDUAL:
@@ -84,9 +122,25 @@ def _customer_names(c: Customer) -> set[str]:
     return {normalize_name(n) for n in names if n and normalize_name(n)}
 
 
+def _customer_company(c: Customer) -> str | None:
+    """The company / brand shown next to a person's name. Legal customers ARE their company (their
+    name already is it), so only individuals carry a separate one."""
+    if c.customer_type == CustomerType.LEGAL:
+        return None
+    return (c.brand_name or c.company_name or "").strip() or None
+
+
+def customer_label(c: Customer) -> str:
+    """'علی رضایی — پلی‌کم' for an individual with a brand, otherwise just the name. Used wherever a
+    customer is a bar / slice / headline in a report, so the company is visible next to the person."""
+    company = _customer_company(c)
+    return f"{c.display_name} — {company}" if company else c.display_name
+
+
 def _customer_ref(c: Customer) -> dict:
     return {
-        "id": c.id, "name": c.display_name, "province": c.factory_province, "industry": c.category,
+        "id": c.id, "name": c.display_name, "company": _customer_company(c), "label": customer_label(c),
+        "customer_type": c.customer_type.value, "province": c.factory_province, "industry": c.category,
     }
 
 
@@ -229,18 +283,12 @@ def _apply(query, f: SaleFilters):
     if f.industry:
         query = query.filter(Customer.category == f.industry)
     if f.search:
-        conds = []
-        for v in {f.search, f.search.translate(_AR_TO_FA)}:
-            like = f"%{_escape_like(v.lower())}%"
-            conds += [
-                db.func.lower(Customer.company_name).like(like, escape="\\"),
-                db.func.lower(Customer.brand_name).like(like, escape="\\"),
-                db.func.lower(Customer.first_name).like(like, escape="\\"),
-                db.func.lower(Customer.last_name).like(like, escape="\\"),
-                db.func.lower(CustomerOptionItem.name).like(like, escape="\\"),
-                db.func.lower(db.func.coalesce(CrmSale.description, "")).like(like, escape="\\"),
-            ]
-        query = query.filter(db.or_(*conds))
+        match = _tokens_match(f.search, (
+            Customer.company_name, Customer.brand_name, Customer.first_name, Customer.last_name,
+            CustomerOptionItem.name, CrmSale.description,
+        ))
+        if match is not None:
+            query = query.filter(match)
     return query
 
 
@@ -465,18 +513,9 @@ def lookup_customers(actor: User, *, search: str = "", limit: int = 20, customer
     if customer_id:  # resolve one customer by its bank id (deep links such as /crm/sales?customer_id=7)
         return [_customer_ref(c) for c in query.filter(Customer.id == customer_id).all()]
     query = query.filter(Customer.is_active.is_(True))
-    term = search.strip()
-    if term:
-        conds = []
-        for v in {term, term.translate(_AR_TO_FA)}:
-            like = f"%{_escape_like(v.lower())}%"
-            conds += [
-                db.func.lower(Customer.company_name).like(like, escape="\\"),
-                db.func.lower(Customer.brand_name).like(like, escape="\\"),
-                db.func.lower(Customer.first_name).like(like, escape="\\"),
-                db.func.lower(Customer.last_name).like(like, escape="\\"),
-            ]
-        query = query.filter(db.or_(*conds))
+    match = _customer_text_match(search.strip())
+    if match is not None:
+        query = query.filter(match)
     rows = query.order_by(Customer.company_name, Customer.last_name, Customer.id).limit(max(1, min(limit, 100))).all()
     return [_customer_ref(c) for c in rows]
 
@@ -537,7 +576,7 @@ def analytics(actor: User, filters: SaleFilters, *, top: int = 8) -> dict:
     if by_customer_rows:
         ids = [r["key"] for r in by_customer_rows]
         for c in db.session.query(Customer).filter(Customer.id.in_(ids)).all():
-            names[c.id] = c.display_name
+            names[c.id] = customer_label(c)
     by_customer = [{"id": r["key"], "name": names.get(r["key"], f"#{r['key']}"),
                     "amount": r["amount"], "quantity_kg": r["quantity_kg"]} for r in by_customer_rows]
 

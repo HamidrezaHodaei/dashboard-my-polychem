@@ -39,6 +39,10 @@ from app.modules.tasks.models import (  # noqa: F401
 from app.modules.suppliers.models import Supplier, SupplierCategory, SupplierFile  # noqa: F401
 from app.modules.customers.models import Customer, CustomerCategory, CustomerOptionItem  # noqa: F401
 from app.modules.crm.models import CrmPaymentMethod, CrmSale  # noqa: F401
+from app.modules.request_samples.models import (  # noqa: F401
+    RequestSample, RequestSampleDispatch, RequestSampleEvent, RequestSampleFile, RequestSampleFollowUp,
+    RequestSampleItem,
+)
 from app.modules.logistics.models import (  # noqa: F401
     LogisticsApplicant,
     LogisticsCompanyProfile,

@@ -5,7 +5,7 @@ Department model — DATABASE.md "Organizational structure > departments".
 read by the authorization engine. See AUTHORIZATION.md §2 for the
 explicit rule against deriving authorization from this field.
 """
-from sqlalchemy import String, ForeignKey, Index
+from sqlalchemy import String, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -48,6 +48,16 @@ class Department(TimestampMixin, SoftDeleteMixin, ActiveFlagMixin, db.Model):
         ),
         nullable=True,
     )
+
+    # Worklist (کارتابل) pictures, set by an admin and shown to everybody who can open this
+    # unit's worklist: the round logo on the card and the banner behind the card. `*_file` is the
+    # random on-disk name under UPLOAD_DIR/departments (NULL = no picture); `branding_version`
+    # grows on every change so browsers can cache the bytes and still pick up a new picture.
+    logo_file: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    logo_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    header_file: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    header_content_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    branding_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     organization: Mapped["Organization"] = relationship(
         "Organization", back_populates="departments"

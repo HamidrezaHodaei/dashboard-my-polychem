@@ -63,6 +63,7 @@
               <TableCell class="whitespace-nowrap">{{ toPersianDigits(s.date) }}</TableCell>
               <TableCell>
                 <p class="font-medium" dir="auto">{{ s.customer.name }}</p>
+                <p v-if="s.customer.company" class="text-xs text-muted-foreground" dir="auto">{{ s.customer.company }}</p>
                 <p v-if="s.customer.province" class="text-xs text-muted-foreground" dir="auto">{{ s.customer.province }}</p>
               </TableCell>
               <TableCell dir="auto">{{ s.product.name }}</TableCell>
@@ -165,7 +166,7 @@ async function afterImport() {
 /* ── export: ALL rows of the current filters (not just this page) ── */
 const COLUMNS = ['تاریخ', 'مشتری', 'استان', 'گرید', 'مقدار (کیلوگرم)', 'فی (ریال)', 'مبلغ خالص (ریال)', 'نوع سند', 'نوع فروش', 'پرداخت', 'وضعیت', 'توضیحات', 'ثبت‌کننده', 'تاریخ و ساعت ثبت']
 const toRow = (s: CrmSale) => [
-  s.date, s.customer.name, s.customer.province ?? '', s.product.name, s.net_quantity_kg, s.unit_price, s.net_amount,
+  s.date, s.customer.label || s.customer.name, s.customer.province ?? '', s.product.name, s.net_quantity_kg, s.unit_price, s.net_amount,
   s.is_return ? 'برگشت از فروش' : 'فاکتور فروش', SALE_TYPE_LABELS[s.sale_type], s.payment_method?.name ?? '',
   SALE_STATUS_LABELS[s.status], s.description ?? '', s.created_by_name ?? '', s.created_at_display ?? '',
 ]

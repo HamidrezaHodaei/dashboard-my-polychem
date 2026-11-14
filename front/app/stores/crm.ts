@@ -1,7 +1,17 @@
 import { defineStore } from 'pinia'
 import { ApiError, apiDownload, apiFetch, apiFetchPage } from '~/services/backendApi'
 
-export interface CrmCustomerRef { id: number, name: string, province: string | null, industry: string | null }
+/** `name` = the person (individual) or the company (legal). `company` = the company / brand shown next to an
+ *  individual's name (null for legal customers). `label` = 'name — company', what reports show. */
+export interface CrmCustomerRef {
+  id: number
+  name: string
+  company?: string | null
+  label?: string
+  customer_type?: 'INDIVIDUAL' | 'LEGAL'
+  province: string | null
+  industry: string | null
+}
 /** A product is an entry of the CUSTOMER BANK's product list -- CRM has no product table of its own. */
 export interface CrmProduct { id: number, name: string, is_active: boolean }
 export interface CrmPaymentMethod { id: number, name: string, is_active: boolean, sales_count: number }

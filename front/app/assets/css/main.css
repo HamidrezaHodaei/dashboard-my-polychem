@@ -399,3 +399,19 @@
 .detail-body > section.detail-wide {
   grid-column: 1 / -1;
 }
+
+/* Request-sample dialogs: every field (inputs, textareas, date fields, pickers, selects) is RTL and
+   right-aligned -- including identifiers / numbers (they keep their own LTR run inside an RTL field). */
+.rs-rtl,
+.rs-rtl input,
+.rs-rtl textarea,
+.rs-rtl [data-slot="select-trigger"],
+.rs-rtl [data-slot="select-value"] {
+  direction: rtl;
+  text-align: right;
+}
+.rs-rtl input::placeholder,
+.rs-rtl textarea::placeholder {
+  direction: rtl;
+  text-align: right;
+}

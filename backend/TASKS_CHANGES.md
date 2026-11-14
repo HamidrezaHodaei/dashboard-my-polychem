@@ -30,3 +30,8 @@ referrer's assignment closes (`REFERRED`) and the new one points at it. The reci
 assignees, fresh checklist) is created with the occurrence date as its due date. Months/years are
 Jalali (day 31 in a 30-day month is clamped, then returns to 31). Copies are created lazily when
 tasks are listed; optionally run `python scripts/run_recurring_tasks.py` nightly from cron.
+
+**Worklist pictures.** Each department (کارتابل واحد) has ONE shared logo and ONE header banner:
+`PUT/DELETE /api/tasks/departments/<id>/branding/<logo|header>` (multipart field `file`, **admin only**) and
+`GET` the same path (any user who can see that unit's worklist; others get 403). PNG/JPG/WEBP/GIF only, 3 MB max,
+content sniffed server-side. `GET /api/tasks/meta` lists `has_logo`, `has_header`, `branding_version` per department.

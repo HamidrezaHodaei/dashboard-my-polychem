@@ -163,14 +163,28 @@ def _write_audit_event(
 
 
 def _find_user_by_identifier(identifier: str) -> User | None:
-    return (
+    """The login identifier is a username OR an e-mail. Both columns are unique, but ONE user's username
+    can equal ANOTHER user's e-mail (or the DB collation is case-insensitive), so the lookup may match
+    two rows. That must never be a 500: the identifier's shape decides which column wins (contains "@"
+    -> e-mail first, otherwise username first), then the oldest row, so the result is deterministic."""
+    rows = (
         db.session.query(User)
         .filter(
             (User.username == identifier) | (User.email == identifier),
             User.deleted_at.is_(None),
         )
-        .one_or_none()
+        .order_by(User.id)
+        .all()
     )
+    if len(rows) <= 1:
+        return rows[0] if rows else None
+    by_email = "@" in identifier
+    exact = [u for u in rows if (u.email == identifier if by_email else u.username == identifier)]
+    # prefer a case-exact match of the preferred column, then the other column, then the oldest user
+    for group in (exact, [u for u in rows if u.username == identifier or u.email == identifier]):
+        if group:
+            return group[0]
+    return rows[0]
 
 
 def authenticate(

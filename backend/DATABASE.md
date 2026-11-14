@@ -22,9 +22,12 @@ Engine: InnoDB. Charset: `utf8mb4` / collation `utf8mb4_unicode_ci`.
 |---|---|---|
 | id | BIGINT UNSIGNED PK | |
 | organization_id | BIGINT UNSIGNED FK → organizations.id ON DELETE CASCADE | |
-| name | VARCHAR(150) | e.g. "فروش" |
+| name | VARCHAR(150) | e.g. "بازاریابی و فروش" |
 | parent_department_id | BIGINT UNSIGNED FK → departments.id NULL | headroom for sub-departments |
 | manager_user_id | BIGINT UNSIGNED FK → users.id NULL | **informational only** — org-chart label. Never read by the authorization engine. See AUTHORIZATION.md §2. |
+| logo_file / logo_content_type | VARCHAR(64) / VARCHAR(50) NULL | worklist (کارتابل) logo; random file name under `UPLOAD_DIR/departments` |
+| header_file / header_content_type | VARCHAR(64) / VARCHAR(50) NULL | banner behind the worklist card |
+| branding_version | INT NOT NULL DEFAULT 0 | +1 on every picture change (client cache key) |
 | is_active | BOOLEAN | |
 | created_at / updated_at / deleted_at | | |
 

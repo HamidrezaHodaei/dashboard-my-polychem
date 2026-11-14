@@ -546,13 +546,6 @@
             <p class="text-xs text-muted-foreground">جمع میزان تولید سالانه‌ی محصولات بالا (به تن)؛ خودکار محاسبه می‌شود.</p>
           </div>
 
-          <!-- تعداد کل خطوط تولید: the sum of the counts typed next to each line below (read-only) -->
-          <div class="space-y-1.5">
-            <Label class="font-semibold">تعداد کل خطوط تولید</Label>
-            <Input :model-value="totalLinesText" dir="auto" class="text-right" disabled />
-            <p class="text-xs text-muted-foreground">جمع تعداد وارد‌شده برای هر خط در پایین؛ خودکار به‌روز می‌شود.</p>
-          </div>
-
           <!-- نام خطوط تولید: add / remove by hand, any number -->
           <div class="space-y-3 rounded-xl border p-4">
             <div class="flex items-center justify-between gap-2">
@@ -599,6 +592,13 @@
               </div>
             </div>
             <p v-if="err.production_line_names" class="text-xs text-destructive">{{ err.production_line_names }}</p>
+          </div>
+
+          <!-- تعداد کل خطوط تولید: the sum of the counts typed next to each line above (read-only) -->
+          <div class="space-y-1.5">
+            <Label class="font-semibold">تعداد کل خطوط تولید</Label>
+            <Input :model-value="totalLinesText" dir="auto" class="text-right" disabled />
+            <p class="text-xs text-muted-foreground">جمع تعداد وارد‌شده برای هر خط در بالا؛ خودکار به‌روز می‌شود.</p>
           </div>
 
           <!-- location -->
