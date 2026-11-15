@@ -74,12 +74,12 @@
                 />
                 <span class="min-w-0 flex-1 text-right">
                   <span
-                    class="block text-sm font-medium text-foreground"
+                    class="block whitespace-pre-line text-sm font-medium text-foreground [overflow-wrap:anywhere]"
                     dir="rtl"
                   >{{ n.title }}</span>
                   <span
                     v-if="n.body"
-                    class="block whitespace-pre-line break-words text-sm leading-6"
+                    class="block whitespace-pre-line text-sm leading-6 [overflow-wrap:anywhere]"
                     dir="rtl"
                   >{{ n.body }}</span>
                   <span class="mt-1 flex items-center gap-x-1 text-xs text-muted-foreground">

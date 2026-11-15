@@ -3,6 +3,7 @@ POST /api/auth/login
 POST /api/auth/refresh
 POST /api/auth/logout
 GET  /api/me
+PUT/DELETE /api/me/avatar
 
 Per Master Context layering, this module only translates HTTP <->
 app.core.auth.services -- no password/token/rotation logic lives here.
@@ -15,7 +16,7 @@ from flask import Blueprint, current_app, g, request
 
 from app.core.auth import services
 from app.core.auth.decorators import require_authenticated
-from app.core.auth.schemas import LoginRequest, UserPublic
+from app.core.auth.schemas import AvatarUpload, LoginRequest, UserPublic
 from app.core.roles.models import Role
 from app.core.authorization.models import UserRole
 from app.extensions import db
@@ -157,6 +158,21 @@ def _public_user(user) -> dict:
 @require_authenticated
 def me():
     return success_response(data=_public_user(g.current_user))
+
+
+@bp.put("/me/avatar")
+@require_authenticated
+def me_set_avatar():
+    payload = AvatarUpload.model_validate(request.get_json(silent=True) or {})
+    user = services.set_avatar(g.current_user, payload.image, ip_address=request.remote_addr)
+    return success_response(data=_public_user(user))
+
+
+@bp.delete("/me/avatar")
+@require_authenticated
+def me_delete_avatar():
+    user = services.set_avatar(g.current_user, None, ip_address=request.remote_addr)
+    return success_response(data=_public_user(user))
 
 
 @bp.get("/me/permissions")

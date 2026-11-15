@@ -24,7 +24,10 @@ Design decisions worth surfacing to a reviewer:
   as one for a real user with a wrong password, per "no user
   enumeration."
 """
+import base64
+import binascii
 import hashlib
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -38,6 +41,7 @@ from app.core.auth.exceptions import AuthenticationFailed
 from app.core.auth.models import RefreshToken
 from app.core.users.models import User
 from app.extensions import db
+from app.utils.exceptions import ConflictError
 
 _password_hasher = PasswordHasher()
 
@@ -326,3 +330,49 @@ def logout(raw_refresh_token: str | None, *, ip_address: str | None = None) -> N
             row.revoked_at = datetime.now(timezone.utc)
             _write_audit_event(user_id=row.user_id, action="logout", ip_address=ip_address)
     db.session.commit()
+
+
+# ---------------------------------------------------------------------
+# Profile photo (the user's OWN avatar)
+# ---------------------------------------------------------------------
+
+_AVATAR_DATA_URL = re.compile(r"^data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/=\s]+)$")
+_AVATAR_MAX_BYTES = 300_000  # the client sends ~256px JPEGs (a few tens of KB); this is a generous ceiling
+
+
+def _looks_like_image(kind: str, raw: bytes) -> bool:
+    """Check the real file signature, so a mislabeled data URL (text, SVG, HTML...) is never stored."""
+    if kind == "png":
+        return raw.startswith(b"\x89PNG\r\n\x1a\n")
+    if kind == "jpeg":
+        return raw.startswith(b"\xff\xd8\xff")
+    if kind == "webp":
+        return raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+    return False
+
+
+def set_avatar(user: User, image: str | None, *, ip_address: str | None = None) -> User:
+    """Set (data URL) or clear (None) the user's own profile photo. Only png/jpeg/webp are accepted."""
+    if image is None:
+        user.avatar_data = None
+    else:
+        match = _AVATAR_DATA_URL.match(image.strip())
+        if match is None:
+            raise ConflictError("Only PNG, JPEG or WebP images are accepted.")
+        kind, b64 = match.group(1), re.sub(r"\s+", "", match.group(2))
+        try:
+            raw = base64.b64decode(b64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ConflictError("The image is not valid base64 data.") from exc
+        if len(raw) > _AVATAR_MAX_BYTES:
+            raise ConflictError("The image is too large.")
+        if not _looks_like_image(kind, raw):
+            raise ConflictError("The file content does not match an image of that type.")
+        user.avatar_data = f"data:image/{kind};base64,{b64}"
+    _write_audit_event(
+        user_id=user.id,
+        action="avatar_removed" if image is None else "avatar_changed",
+        ip_address=ip_address,
+    )
+    db.session.commit()
+    return user

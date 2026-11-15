@@ -26,7 +26,7 @@
     <PopoverContent
       side="bottom"
       dir="rtl"
-      class="w-80 p-0 text-right"
+      class="w-[min(20rem,calc(100vw-1.5rem))] p-0 text-right"
     >
       <div class="flex items-center justify-between px-3 pb-1.5 pt-2.5">
         <span class="text-sm font-semibold">اعلان‌ها</span>
@@ -41,7 +41,7 @@
         </Button>
       </div>
 
-      <ul class="max-h-64 divide-y overflow-y-auto border-t">
+      <ul class="max-h-[min(18rem,60vh)] divide-y overflow-y-auto overflow-x-hidden border-t">
         <li
           v-for="n in latest"
           :key="n.id"
@@ -63,14 +63,14 @@
                 />
                 <span class="min-w-0 flex-1 text-right">
                   <span
-                    class="block text-[13px] font-medium text-foreground"
-                    :class="isExpanded(n) ? 'whitespace-pre-line break-words' : 'truncate'"
+                    class="block text-[13px] font-medium text-foreground [overflow-wrap:anywhere]"
+                    :class="isExpanded(n) ? 'whitespace-pre-line' : 'line-clamp-1'"
                     dir="rtl"
                   >{{ n.title }}</span>
                   <span
                     v-if="n.body"
-                    class="block text-xs leading-5"
-                    :class="isExpanded(n) ? 'whitespace-pre-line break-words' : 'line-clamp-2'"
+                    class="block text-xs leading-5 [overflow-wrap:anywhere]"
+                    :class="isExpanded(n) ? 'whitespace-pre-line' : 'line-clamp-2'"
                     dir="rtl"
                   >{{ n.body }}</span>
                   <span class="mt-0.5 flex items-center gap-x-1 text-[11px] text-muted-foreground">
@@ -151,8 +151,8 @@ const latest = computed(() => store.items.slice(0, PREVIEW_COUNT))
 // «مشاهده بیشتر»: the preview clips long text (title to one line, body to two); this lets the user open
 // the complete message in place. Offered only when the text can actually be clipped.
 const expanded = ref<Set<number>>(new Set())
-const TITLE_CLIP = 34
-const BODY_CLIP = 70
+const TITLE_CLIP = 26
+const BODY_CLIP = 50
 const canExpand = (n: AppNotification) => n.title.length > TITLE_CLIP || (n.body?.length ?? 0) > BODY_CLIP || (n.body?.includes('\n') ?? false)
 const isExpanded = (n: AppNotification) => expanded.value.has(n.id)
 function toggleExpanded(n: AppNotification) {

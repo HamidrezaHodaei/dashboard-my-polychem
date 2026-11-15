@@ -4,7 +4,7 @@ body validated through a Pydantic schema before it reaches a service."
 """
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class LoginRequest(BaseModel):
@@ -52,6 +52,8 @@ class UserPublic(BaseModel):
     department_id: int | None
     is_active: bool
     last_login_at: datetime | None
+    # The profile photo (data URL) lives in the deferred `User.avatar_data` column.
+    avatar: str | None = Field(default=None, validation_alias=AliasChoices("avatar_data", "avatar"))
     # The roles the user holds. The frontend derives `isAdmin` from this list (it gates the admin-only
     # "change password" button in the user-management panel); the backend still enforces admin-only
     # on POST /api/core/users/<id>/password itself.

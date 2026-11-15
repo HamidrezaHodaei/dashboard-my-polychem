@@ -20,7 +20,20 @@ const paused = ref(false)
 const open = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 
-const expandable = computed(() => !!(props.description || props.action))
+// «مشاهده بیشتر»: عنوان در حالت بسته حداکثر دو خط نمایش داده می‌شود؛ اگر واقعاً بریده شده باشد
+// (با اندازه‌گیری DOM، نه حدس روی تعداد حروف) دکمه‌ی مشاهده‌ی کامل متن نشان داده می‌شود.
+const titleEl = ref<HTMLElement | null>(null)
+const titleClipped = ref(false)
+let resizeObserver: ResizeObserver | null = null
+
+function measureTitle() {
+  const el = titleEl.value
+  if (!el || open.value) return
+  titleClipped.value = el.scrollHeight > el.clientHeight + 1
+}
+
+const hasBody = computed(() => !!(props.description || props.action))
+const expandable = computed(() => hasBody.value || titleClipped.value)
 const progress = computed(() => (remaining.value / total) * 100)
 const secondsLeft = computed(() => Math.ceil(remaining.value / 1000).toLocaleString('fa-IR'))
 
@@ -41,44 +54,62 @@ function runAction() {
   close()
 }
 
+// تا وقتی کاربر در حال خواندن متن کامل است، تایمر بسته شدن متوقف می‌ماند.
+function toggle() {
+  open.value = !open.value
+  if (open.value) paused.value = true
+  else nextTick(measureTitle)
+}
+
 onMounted(() => {
   timer = setInterval(() => {
     if (paused.value) return
     remaining.value -= TICK
     if (remaining.value <= 0) close()
   }, TICK)
+
+  nextTick(measureTitle)
+  if (typeof ResizeObserver !== 'undefined' && titleEl.value) {
+    resizeObserver = new ResizeObserver(measureTitle)
+    resizeObserver.observe(titleEl.value)
+  }
 })
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
+  resizeObserver?.disconnect()
 })
 </script>
 
 <template>
   <div
     dir="rtl"
-    class="w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg"
+    class="w-full min-w-0 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover text-right text-popover-foreground shadow-lg sm:w-[22rem]"
   >
     <!-- سربرگ -->
-    <div class="flex items-center gap-2.5 px-3.5 pt-3 pb-2.5">
-      <component :is="theme.icon" class="size-5 shrink-0" :class="theme.text" />
-      <p class="min-w-0 flex-1 truncate text-sm font-semibold">
+    <div class="flex items-start gap-2.5 px-3.5 pt-3 pb-2.5">
+      <component :is="theme.icon" class="mt-0.5 size-5 shrink-0" :class="theme.text" />
+      <p
+        ref="titleEl"
+        class="min-w-0 flex-1 whitespace-pre-line text-sm font-semibold leading-6 [overflow-wrap:anywhere]"
+        :class="open ? '' : 'line-clamp-2'"
+      >
         {{ title }}
       </p>
 
       <button
         v-if="expandable"
         type="button"
-        class="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        :aria-label="open ? 'بستن جزئیات' : 'نمایش جزئیات'"
+        class="mt-0.5 shrink-0 rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        :aria-label="open ? 'مشاهده کمتر' : 'مشاهده بیشتر'"
         :aria-expanded="open"
-        @click="open = !open"
+        @click="toggle"
       >
         <ChevronDownIcon class="size-4 transition-transform duration-300" :class="open ? 'rotate-180' : ''" />
       </button>
       <button
         type="button"
-        class="rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        class="mt-0.5 shrink-0 rounded p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
         aria-label="بستن"
         @click="close"
       >
@@ -88,13 +119,16 @@ onBeforeUnmount(() => {
 
     <!-- بدنه‌ی قابل باز شدن -->
     <div
-      v-if="expandable"
+      v-if="hasBody"
       class="grid transition-[grid-template-rows] duration-300 ease-out"
       :class="open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
     >
       <div class="overflow-hidden">
-        <div class="px-3.5 pb-3.5 pt-0.5">
-          <p v-if="description" class="text-[13px] leading-6 text-muted-foreground">
+        <div class="max-h-[45vh] overflow-y-auto px-3.5 pb-3.5 pt-0.5">
+          <p
+            v-if="description"
+            class="whitespace-pre-line text-[13px] leading-6 text-muted-foreground [overflow-wrap:anywhere]"
+          >
             {{ description }}
           </p>
           <button
@@ -108,6 +142,17 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- مشاهده‌ی بیشتر برای عنوان بلندِ بدون توضیح -->
+    <button
+      v-if="expandable && !hasBody"
+      type="button"
+      class="block w-full px-3.5 pb-2 text-start text-[11px] font-medium text-primary hover:underline"
+      :aria-expanded="open"
+      @click="toggle"
+    >
+      {{ open ? 'مشاهده کمتر' : 'مشاهده بیشتر' }}
+    </button>
 
     <!-- فوتر تایمر -->
     <button
