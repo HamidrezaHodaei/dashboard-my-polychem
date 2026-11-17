@@ -84,6 +84,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.crm.routes import bp as crm_bp
     from app.modules.request_samples.routes import bp as request_samples_bp
     from app.modules.logistics.routes import bp as logistics_bp
+    from app.modules.purchases.routes import bp as purchases_bp
     from app.modules.notifications.routes import bp as notifications_bp
 
     app.register_blueprint(health_bp)
@@ -115,6 +116,9 @@ def _register_blueprints(app: Flask) -> None:
 
     # Logistics — transport-company / driver registration module.
     app.register_blueprint(logistics_bp)
+
+    # Procurement -- Purchase Reports (purchase requests, inquiries, KPI dashboard, exports).
+    app.register_blueprint(purchases_bp)
 
     # In-app notifications (header bell) — /api/notifications.
     app.register_blueprint(notifications_bp)

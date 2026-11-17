@@ -21,6 +21,8 @@ const ROUTE_NAVIGATION_KEYS: Record<string, string | string[]> = {
   '/tasks': 'tasks',
   // Logistics database: a user needs access to at least one of the two applicant types.
   '/procurement/logistics': ['logistics_companies', 'logistics_drivers'],
+  // Purchase Reports (گزارشات خرید): procurement.purchase.read
+  '/procurement/purchases': 'purchase_reports',
 }
 
 // Sections with no backend permission to grant (placeholder modules) are admin-only -- the sidebar hides

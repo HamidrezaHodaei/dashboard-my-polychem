@@ -76,3 +76,11 @@ __all__ = [
     "Supplier",
     "SupplierCategory",
 ]
+from app.modules.purchases.models import (  # noqa: F401,E402
+    PurchaseEvent,
+    PurchaseFile,
+    PurchaseInquiry,
+    PurchaseInquiryItem,
+    PurchaseItem,
+    PurchaseRequest,
+)

@@ -185,6 +185,8 @@ _BUSINESS_RESOURCES = (
     # workflow actions (approve, reject, dispatch, ...) are the non-delegable extras below.
     ("crm", "request_sample", True),
     ("finance", "transaction", False),
+    # Purchase Reports (modules/purchases): money is recorded here, so CRUD is non-delegable.
+    ("procurement", "purchase", False),
     ("warehouse", "stock", True),
     ("website", "page", True),
     ("reports", "report", True),
@@ -244,6 +246,8 @@ _LOGISTICS_DEFINITIONS: list[PermissionDefinition] = [
 EXTRA_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
     ("crm", "customer", "review"), ("crm", "customer", "export"),
     ("procurement", "supplier", "review"), ("procurement", "supplier", "export"),
+    # approve = approve a reference price / reopen a closed purchase; export = Excel / print of reports
+    ("procurement", "purchase", "approve"), ("procurement", "purchase", "export"),
     ("logistics", "company", "export"), ("logistics", "driver", "export"),
     ("crm", "sale", "export"), ("crm", "sale", "print"),
     ("crm", "request_sample", "approve"), ("crm", "request_sample", "reject"),
@@ -313,6 +317,7 @@ MATRIX_MODULES: tuple[MatrixModule, ...] = (
     MatrixModule("website.page", "Website"),
     MatrixModule("reports.report", "Reports"),
     MatrixModule("procurement.supplier", "Suppliers", ("review", "export")),
+    MatrixModule("procurement.purchase", "Purchase Reports", ("approve", "export")),
     MatrixModule("logistics.company", "Transport Companies", ("review", "export")),
     MatrixModule("logistics.driver", "Drivers", ("review", "export")),
 )

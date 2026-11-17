@@ -293,6 +293,13 @@ const baseNav: SidebarProps['nav'] = [
             },
             navKey: ['logistics_companies', 'logistics_drivers'],
           },
+          {
+            title: 'گزارشات خرید',
+            link: {
+              to: '/procurement/purchases',
+            },
+            navKey: 'purchase_reports',
+          },
         ],
       },
       {
