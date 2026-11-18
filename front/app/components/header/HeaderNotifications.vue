@@ -170,6 +170,7 @@ onMounted(() => store.start())
 onBeforeUnmount(() => store.stop())
 
 const iconFor = (type: string) => ({
+  MAIL: 'lucide:mail',
   TASK_ASSIGNED: 'lucide:clipboard-list',
   TASK_REFERRED: 'lucide:corner-up-left',
   TASK_MENTION: 'lucide:at-sign',

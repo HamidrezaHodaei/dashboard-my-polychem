@@ -195,6 +195,11 @@ _BUSINESS_RESOURCES = (
     # does not go through this at all -- these four keys only gate the
     # admin panel (list/review/add/delete).
     ("procurement", "supplier", True),
+    # Organizational correspondence / internal mail (modules/mail): read = open the mailbox,
+    # create = compose / reply / forward / send, update = star, label, archive, move, mark read,
+    # delete = trash and permanently delete one's own copy. Access can ALSO be granted to a whole
+    # organizational unit (department) -- see app/modules/mail/access.py.
+    ("correspondence", "mail", True),
 )
 _BUSINESS_DEFINITIONS: list[PermissionDefinition] = [
     PermissionDefinition(
@@ -248,12 +253,16 @@ EXTRA_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
     ("procurement", "supplier", "review"), ("procurement", "supplier", "export"),
     # approve = approve a reference price / reopen a closed purchase; export = Excel / print of reports
     ("procurement", "purchase", "approve"), ("procurement", "purchase", "export"),
+    # manage_catalog = create / edit / delete the purchase product catalog (admin)
+    ("procurement", "purchase", "manage_catalog"),
     ("logistics", "company", "export"), ("logistics", "driver", "export"),
     ("crm", "sale", "export"), ("crm", "sale", "print"),
     ("crm", "request_sample", "approve"), ("crm", "request_sample", "reject"),
     ("crm", "request_sample", "dispatch"), ("crm", "request_sample", "follow_up"),
     ("crm", "request_sample", "feedback"), ("crm", "request_sample", "convert"),
     ("crm", "request_sample", "export"),
+    # manage_catalog = add / edit / delete the sample delivery methods (admin panel)
+    ("crm", "request_sample", "manage_catalog"),
 )
 _EXTRA_DEFINITIONS: list[PermissionDefinition] = [
     PermissionDefinition(
@@ -310,16 +319,17 @@ MATRIX_MODULES: tuple[MatrixModule, ...] = (
     MatrixModule("crm.product", "CRM Products"),
     MatrixModule(
         "crm.request_sample", "Request Sample",
-        ("approve", "reject", "dispatch", "follow_up", "feedback", "convert", "export"),
+        ("approve", "reject", "dispatch", "follow_up", "feedback", "convert", "export", "manage_catalog"),
     ),
     MatrixModule("finance.transaction", "Finance"),
     MatrixModule("warehouse.stock", "Warehouse"),
     MatrixModule("website.page", "Website"),
     MatrixModule("reports.report", "Reports"),
     MatrixModule("procurement.supplier", "Suppliers", ("review", "export")),
-    MatrixModule("procurement.purchase", "Purchase Reports", ("approve", "export")),
+    MatrixModule("procurement.purchase", "Purchase Reports", ("approve", "export", "manage_catalog")),
     MatrixModule("logistics.company", "Transport Companies", ("review", "export")),
     MatrixModule("logistics.driver", "Drivers", ("review", "export")),
+    MatrixModule("correspondence.mail", "مکاتبات"),
 )
 
 

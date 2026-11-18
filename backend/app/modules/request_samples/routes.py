@@ -10,7 +10,8 @@ from app.core.export_files import collect_pages, send_export
 from app.modules import export_rows
 from app.modules.request_samples import files, services
 from app.modules.request_samples.schemas import (
-    ConvertIn, DeliveryIn, DispatchIn, FeedbackIn, FollowUpIn, RequestIn, TransitionIn,
+    ConvertIn, DeliveryIn, DeliveryMethodIn, DeliveryMethodUpdate, DispatchIn, FeedbackIn, FollowUpIn, RequestIn,
+    TransitionIn,
 )
 from app.utils.pagination import parse_pagination
 from app.utils.responses import success_response
@@ -43,6 +44,36 @@ def option_items():
 @require_authenticated
 def reps():
     return success_response(data=services.rep_candidates(g.current_user))
+
+
+# ── delivery methods (the dropdown of the form; managed by an admin) ─
+@bp.get("/delivery-methods")
+@require_authenticated
+def list_delivery_methods():
+    include_inactive = (request.args.get("include_inactive") or "").lower() in ("1", "true")
+    return success_response(data=services.list_delivery_methods(g.current_user, include_inactive=include_inactive))
+
+
+@bp.post("/delivery-methods")
+@require_authenticated
+def create_delivery_method():
+    payload = DeliveryMethodIn.model_validate(_json())
+    data = services.create_delivery_method(g.current_user, payload, ip_address=request.remote_addr)
+    return success_response(data=data, status_code=201)
+
+
+@bp.put("/delivery-methods/<int:method_id>")
+@require_authenticated
+def update_delivery_method(method_id: int):
+    payload = DeliveryMethodUpdate.model_validate(_json())
+    return success_response(data=services.update_delivery_method(g.current_user, method_id, payload, ip_address=request.remote_addr))
+
+
+@bp.delete("/delivery-methods/<int:method_id>")
+@require_authenticated
+def delete_delivery_method(method_id: int):
+    services.delete_delivery_method(g.current_user, method_id, ip_address=request.remote_addr)
+    return success_response(data={"deleted": True})
 
 
 @bp.get("/analytics")

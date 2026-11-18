@@ -20,15 +20,16 @@ def _blank_to_none(v):
 
 
 class ItemIn(_In):
-    product_name: str = Field(min_length=1, max_length=255)
-    grade: str | None = Field(default=None, max_length=255)
+    """One product row. The product is identified by its grade alone (no product name / group / alternative)."""
+
+    grade: str = Field(min_length=1, max_length=255)
     quantity: Decimal = Field(gt=0, max_digits=14, decimal_places=3)
     unit: str = "kg"
     number_of_samples: int = Field(default=1, ge=1, le=10000)
     packaging: str | None = Field(default=None, max_length=200)
     specifications: str | None = None
 
-    @field_validator("grade", "packaging", "specifications", mode="before")
+    @field_validator("packaging", "specifications", mode="before")
     @classmethod
     def _blank(cls, v):
         return _blank_to_none(v)
@@ -175,3 +176,19 @@ class FeedbackIn(_In):
 class ConvertIn(_In):
     sale_id: int | None = None
     note: str | None = None
+
+
+class DeliveryMethodIn(_In):
+    """Admin: add a sample delivery method."""
+
+    name: str = Field(min_length=1, max_length=100)
+    sort_order: int = Field(default=0, ge=0, le=100000)
+    is_active: bool = True
+
+
+class DeliveryMethodUpdate(_In):
+    """Admin: edit a sample delivery method (only the sent fields change)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    sort_order: int | None = Field(default=None, ge=0, le=100000)
+    is_active: bool | None = None

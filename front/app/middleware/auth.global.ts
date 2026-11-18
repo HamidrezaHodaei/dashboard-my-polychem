@@ -23,6 +23,8 @@ const ROUTE_NAVIGATION_KEYS: Record<string, string | string[]> = {
   '/procurement/logistics': ['logistics_companies', 'logistics_drivers'],
   // Purchase Reports (گزارشات خرید): procurement.purchase.read
   '/procurement/purchases': 'purchase_reports',
+  // Correspondence (مکاتبات): correspondence.mail.read, or an organizational unit the admin enabled.
+  '/mail': 'correspondence',
 }
 
 // Sections with no backend permission to grant (placeholder modules) are admin-only -- the sidebar hides

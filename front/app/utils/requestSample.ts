@@ -23,17 +23,17 @@ export const STATUS_META: Record<SampleStatus, { label: string, en: string, cls:
 export const STATUS_ORDER = Object.keys(STATUS_META) as SampleStatus[]
 
 export const PRIORITY_META: Record<SamplePriority, { label: string, cls: string }> = {
-  LOW: { label: 'کم', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
-  NORMAL: { label: 'عادی', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
-  HIGH: { label: 'زیاد', cls: 'bg-orange-100 text-orange-700 border-orange-200' },
-  URGENT: { label: 'فوری', cls: 'bg-red-100 text-red-700 border-red-200' },
+  LOW: { label: 'کم', cls: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-200' },
+  NORMAL: { label: 'عادی', cls: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300' },
+  HIGH: { label: 'زیاد', cls: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300' },
+  URGENT: { label: 'فوری', cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300' },
 }
 export const FEEDBACK_META: Record<FeedbackStatus, { label: string, cls: string, color: string }> = {
-  ACCEPTED: { label: 'تأیید شد', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', color: '#10b981' },
-  REJECTED: { label: 'تأیید نشد', cls: 'bg-red-100 text-red-700 border-red-200', color: '#ef4444' },
-  ACCEPTED_WITH_CONDITIONS: { label: 'تأیید مشروط', cls: 'bg-amber-100 text-amber-800 border-amber-200', color: '#f59e0b' },
-  UNDER_EVALUATION: { label: 'در حال بررسی', cls: 'bg-sky-100 text-sky-700 border-sky-200', color: '#0ea5e9' },
-  NO_RESPONSE: { label: 'بدون پاسخ', cls: 'bg-slate-100 text-slate-600 border-slate-200', color: '#94a3b8' },
+  ACCEPTED: { label: 'تأیید شد', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300', color: '#10b981' },
+  REJECTED: { label: 'تأیید نشد', cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300', color: '#ef4444' },
+  ACCEPTED_WITH_CONDITIONS: { label: 'تأیید مشروط', cls: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300', color: '#f59e0b' },
+  UNDER_EVALUATION: { label: 'در حال بررسی', cls: 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300', color: '#0ea5e9' },
+  NO_RESPONSE: { label: 'بدون پاسخ', cls: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-200', color: '#94a3b8' },
 }
 export const METHOD_LABELS: Record<FollowUpMethod, string> = {
   PHONE: 'تماس تلفنی', EMAIL: 'ایمیل', MEETING: 'جلسه', MESSAGE: 'پیام', OTHER: 'سایر',
@@ -45,7 +45,6 @@ export const UNIT_OPTIONS = [
   { value: 'kg', label: 'کیلوگرم (kg)' }, { value: 'g', label: 'گرم (g)' }, { value: 'ton', label: 'تن' },
   { value: 'liter', label: 'لیتر' }, { value: 'piece', label: 'عدد' },
 ]
-export const DELIVERY_METHODS = ['پیک موتوری', 'تحویل حضوری', 'باربری', 'پست پیشتاز', 'حمل جاده‌ای (کامیون)', 'حمل هوایی', 'سایر']
 export const FILE_KIND_LABELS: Record<string, string> = {
   TECHNICAL: 'مستندات فنی', DISPATCH: 'مدارک ارسال', FOLLOWUP: 'پیگیری', FEEDBACK: 'بازخورد', OTHER: 'سایر',
 }
@@ -86,16 +85,18 @@ export interface SampleCustomer {
   company_name?: string | null, customer_type?: string, company_phone?: string | null, category?: string | null,
   contacts?: { name: string, position: string | null, mobile: string | null, landline: string | null }[]
 }
+/** a sample delivery method (روش تحویل نمونه) -- managed by an admin, served by GET /crm/request-samples/delivery-methods */
+export interface SampleDeliveryMethod { id: number, name: string, sort_order: number, is_active: boolean, usage_count?: number }
 export interface SampleRow {
   id: number, code: string, status: SampleStatus, priority: SamplePriority, customer: SampleCustomer,
   sales_rep: { id: number | null, name: string | null }, requested_date: string, required_delivery_date: string | null,
-  dispatch_ref_number: string | null, product: string | null, grade: string | null, items_count: number,
+  dispatch_ref_number: string | null, grade: string | null, items_count: number,
   quantity_label: string, feedback_status: FeedbackStatus | null, parent_request_id: number | null,
   created_by_name: string | null, created_at: string | null, next_followup_date: string | null,
   followup_overdue: boolean, my_actions: SampleActions
 }
 export interface SampleItem {
-  id?: number, product_name: string, grade: string | null,
+  id?: number, grade: string | null,
   quantity: number | null, unit: string, number_of_samples: number,
   packaging: string | null, specifications: string | null
 }
@@ -136,7 +137,7 @@ export interface SampleAnalytics {
   trend: { key: string, label: string, count: number }[]
   granularity: 'day' | 'week' | 'month'
   status_distribution: { status: SampleStatus, count: number }[]
-  top_products: { product: string, grade: string | null, requests: number, quantity_kg: number }[]
+  top_products: { grade: string, requests: number, quantity_kg: number }[]
   sales_performance: { rep_id: number | null, name: string, requests: number, approved: number, rejected: number, dispatched: number, accepted: number, converted: number, approval_rate: number | null, conversion_rate: number | null }[]
   feedback: { counts: Record<string, number>, total: number, accepted_pct: number | null, rejected_pct: number | null, conditional_pct: number | null }
   conversion: { dispatched: number, converted: number, rate: number | null }

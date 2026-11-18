@@ -40,8 +40,9 @@ class PurchaseStatus(str, enum.Enum):
     INQUIRING = "INQUIRING"                      # در حال استعلام
     AWAITING_SELECTION = "AWAITING_SELECTION"    # در انتظار انتخاب تأمین‌کننده
     PURCHASING = "PURCHASING"                    # در حال انجام خرید
-    AWAITING_DELIVERY = "AWAITING_DELIVERY"      # در انتظار تحویل
-    COMPLETED = "COMPLETED"                      # تکمیل‌شده
+    SENT_TO_FINANCE = "SENT_TO_FINANCE"          # ارسال به مالی
+    AWAITING_DELIVERY = "AWAITING_DELIVERY"      # در حال تحویل و حمل (value kept from the first release)
+    COMPLETED = "COMPLETED"                      # پایان‌یافته (value kept from the first release)
     CANCELLED = "CANCELLED"                      # لغوشده
     NEEDS_REVISION = "NEEDS_REVISION"            # نیازمند اصلاح اطلاعات
 
@@ -50,9 +51,19 @@ class PurchaseStatus(str, enum.Enum):
 # pipeline, a completed or cancelled one is closed.
 OPEN_STATUSES = (
     PurchaseStatus.ENTERING, PurchaseStatus.AWAITING_INQUIRY, PurchaseStatus.INQUIRING,
-    PurchaseStatus.AWAITING_SELECTION, PurchaseStatus.PURCHASING, PurchaseStatus.AWAITING_DELIVERY,
+    PurchaseStatus.AWAITING_SELECTION, PurchaseStatus.PURCHASING, PurchaseStatus.SENT_TO_FINANCE,
+    PurchaseStatus.AWAITING_DELIVERY,
     PurchaseStatus.NEEDS_REVISION,
 )
+
+
+class ReviewStatus(str, enum.Enum):
+    """The expert's review of the request (cartable). Separate from the procurement workflow `status`:
+    a request may arrive on paper, be recorded, and be judged here independently of how far the purchase got."""
+    PENDING_REVIEW = "PENDING_REVIEW"    # در انتظار بررسی
+    APPROVED = "APPROVED"                # تأیید شده
+    REJECTED = "REJECTED"                # رد شده (stays in the records)
+    NEEDS_REVISION = "NEEDS_REVISION"    # نیازمند اصلاح
 
 
 class DeliveryStatus(str, enum.Enum):
@@ -119,6 +130,8 @@ class PurchaseRequest(TimestampMixin, SoftDeleteMixin, db.Model):
     selection_reasons: Mapped[list | None] = mapped_column(JSON, nullable=True)  # LOWEST_PRICE, QUALITY, ...
     selection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    sent_to_finance_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # -- step 6: result --
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     final_extra_costs: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
@@ -132,6 +145,14 @@ class PurchaseRequest(TimestampMixin, SoftDeleteMixin, db.Model):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     status_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)  # cancel / revision reason
+
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        SAEnum(ReviewStatus, name="purchase_review_status", native_enum=False, length=20),
+        nullable=False, default=ReviewStatus.PENDING_REVIEW, server_default="PENDING_REVIEW",
+    )
+    review_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -174,6 +195,11 @@ class PurchaseItem(TimestampMixin, db.Model):
         BigIntUnsigned, ForeignKey("supplier_categories.id", ondelete="SET NULL"), nullable=True
     )
     category_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # the catalog product (purchase_products); name / code are copied so history survives a later rename
+    product_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("purchase_products.id", ondelete="SET NULL"), nullable=True
+    )
+    product_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     specs: Mapped[str | None] = mapped_column(Text, nullable=True)
     brand_model: Mapped[str | None] = mapped_column(String(150), nullable=True)
@@ -276,6 +302,58 @@ class PurchaseEvent(db.Model):
     user_id: Mapped[int | None] = mapped_column(BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     user_name: Mapped[str | None] = mapped_column(String(200), nullable=True)   # snapshot, survives user removal
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class PurchaseProduct(TimestampMixin, db.Model):
+    """The purchase module's OWN product catalog (independent of other modules), managed by an admin.
+    `code` is free text typed by the admin (letters, digits and a few separators) -- never generated or numeric."""
+    __tablename__ = "purchase_products"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_purchase_products_name"),
+        UniqueConstraint("code", name="uq_purchase_products_code"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    category_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("supplier_categories.id", ondelete="SET NULL"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(db.Boolean, nullable=False, default=True, server_default="1")
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class PurchaseDirect(TimestampMixin, SoftDeleteMixin, db.Model):
+    """A DIRECT purchase: recorded as a report line only -- no request, no quotations. It still feeds the
+    aggregate reports and the dashboard (spent, groups, suppliers, trend)."""
+    __tablename__ = "purchase_direct"
+    __table_args__ = (
+        UniqueConstraint("doc_no", name="uq_purchase_direct_doc_no"),
+        Index("ix_purchase_direct_date", "purchase_date"),
+        Index("ix_purchase_direct_supplier", "supplier_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    doc_no: Mapped[str] = mapped_column(String(50), nullable=False)          # typed by the expert
+    purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)         # goods / service name
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("supplier_categories.id", ondelete="SET NULL"), nullable=True
+    )
+    category_name: Mapped[str | None] = mapped_column(String(100), nullable=True)   # snapshot
+    supplier_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True
+    )
+    supplier_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)       # whole rials
+    usage_place: Mapped[str] = mapped_column(String(255), nullable=False)       # محل مصرف
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    creator_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
 class PurchaseFile(TimestampMixin, db.Model):

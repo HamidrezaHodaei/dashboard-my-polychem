@@ -225,22 +225,22 @@
       </div>
 
       <div class="grid gap-6 lg:grid-cols-2">
-        <!-- 3. Top Requested Products -->
+        <!-- 3. Top Requested Grades -->
         <PrintableChart
-          title="Top Requested Products"
+          title="Top Requested Grades"
           class="gap-3 p-5 shadow-none"
         >
           <h3 class="pl-16 text-base font-semibold">
-            Top Requested Products · پرتقاضاترین محصول و گرید
+            Top Requested Grades · پرتقاضاترین گریدها
           </h3>
           <div class="space-y-3">
             <div
               v-for="(p, i) in data.top_products"
-              :key="`${p.product}-${p.grade}`"
+              :key="p.grade"
               class="space-y-1"
             >
               <div class="flex items-center justify-between gap-3 text-sm">
-                <span class="min-w-0 truncate font-medium"><span class="text-muted-foreground">{{ fa(i + 1) }}.</span> {{ p.product }}<span v-if="p.grade"> · {{ p.grade }}</span></span>
+                <span class="min-w-0 truncate font-medium"><span class="text-muted-foreground">{{ fa(i + 1) }}.</span> {{ p.grade }}</span>
                 <span class="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{{ fa(p.requests) }} درخواست<template v-if="p.quantity_kg"> · {{ fa(Math.round(p.quantity_kg)) }} kg</template></span>
               </div>
               <div class="h-2 overflow-hidden rounded-full bg-muted">

@@ -121,10 +121,10 @@ REQUEST_SAMPLE_FEEDBACK = {
 
 
 def request_samples_table(rows: list[dict]) -> tuple[str, list[str], list[list]]:
-    headers = ["شناسه", "مشتری", "محصول", "گرید", "مقدار نمونه", "تاریخ ثبت", "کارشناس فروش", "اولویت", "وضعیت",
+    headers = ["شناسه", "مشتری", "گرید", "مقدار نمونه", "تاریخ ثبت", "کارشناس فروش", "اولویت", "وضعیت",
                "بازخورد مشتری", "شمارهٔ حواله", "ثبت‌کننده"]
     data = [[
-        r["code"], r["customer"]["name"], r["product"] or "", r["grade"] or "", r["quantity_label"],
+        r["code"], r["customer"]["name"], r["grade"] or "", r["quantity_label"],
         format_jalali(datetime.fromisoformat(r["requested_date"]).date()), r["sales_rep"]["name"] or "",
         REQUEST_SAMPLE_PRIORITY.get(r["priority"], ""), REQUEST_SAMPLE_STATUS.get(r["status"], ""),
         REQUEST_SAMPLE_FEEDBACK.get(r["feedback_status"] or "", ""), r["dispatch_ref_number"] or "", r["created_by_name"] or "",

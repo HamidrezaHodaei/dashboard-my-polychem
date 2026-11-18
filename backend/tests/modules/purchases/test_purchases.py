@@ -8,11 +8,12 @@ import pytest
 from app.core.authorization.models import ScopeType
 from app.core.permissions.models import Permission
 from app.extensions import db
+from app.modules.purchases.models import PurchaseProduct
 from app.modules.suppliers.models import Supplier, SupplierCategory
 from tests.core4.factories import auth_headers, grant_user_permission, make_permission, make_user
 
 BASE = "/api/purchases"
-ALL = [f"procurement.purchase.{a}" for a in ("create", "read", "update", "delete", "approve", "export")]
+ALL = [f"procurement.purchase.{a}" for a in ("create", "read", "update", "delete", "approve", "export", "manage_catalog")]
 
 
 def staff(*keys):
@@ -30,12 +31,19 @@ def world(app):
     cats = [SupplierCategory(name="پلیمر و رزین", sort_order=1), SupplierCategory(name="بسته‌بندی", sort_order=2)]
     sups = [Supplier(company_name=f"تأمین {i}", supplier_type="LEGAL", status="ACTIVE") for i in range(3)]
     db.session.add_all(cats + sups)
+    db.session.flush()
+    prods = [PurchaseProduct(name="رزین PP", code="RS-0012/A", category_id=cats[0].id),
+             PurchaseProduct(name="کیسه", code="007", category_id=cats[1].id)]
+    db.session.add_all(prods)
     db.session.commit()
-    return {"cats": [c.id for c in cats], "sups": [s.id for s in sups]}
+    return {"cats": [c.id for c in cats], "sups": [s.id for s in sups], "prods": [p.id for p in prods]}
+
+
+_seq = iter(range(1, 10_000))
 
 
 def basic(**o):
-    body = {"requester_unit": "تولید", "requester_name": "علی رضایی", "request_date": "1405/08/20",
+    body = {"request_no": f"P-{next(_seq)}/ب", "requester_unit": "تولید", "requester_name": "علی رضایی", "request_date": "1405/08/20",
             "subject": "خرید رزین", "priority": "NORMAL", "reason": "کمبود موجودی", "complete": True}
     body.update(o)
     return body
@@ -45,7 +53,7 @@ def new_request(client, h, w, items=None, **over):
     r = client.post(BASE, json=basic(**over), headers=h)
     assert r.status_code == 201, r.get_json()
     rid = r.get_json()["data"]["id"]
-    items = items or [{"category_id": w["cats"][0], "name": "رزین PP", "quantity": 10, "unit": "کیلوگرم",
+    items = items or [{"product_id": w["prods"][0], "category_id": w["cats"][0], "quantity": 10, "unit": "کیلوگرم",
                        "estimated_unit_price": 1000}]
     r = client.put(f"{BASE}/{rid}/items", json={"items": items, "complete": True}, headers=h)
     assert r.status_code == 200, r.get_json()
@@ -87,11 +95,13 @@ def test_full_purchase_flow_and_savings(client, world):
     d = client.put(f"{BASE}/{rid}/selection", json={"inquiry_id": low["id"], "reasons": ["LOWEST_PRICE"], "complete": True},
                    headers=h).get_json()["data"]
     assert d["status"] == "PURCHASING"
+    d = client.post(f"{BASE}/{rid}/send-to-finance", headers=h).get_json()["data"]
+    assert d["status"] == "SENT_TO_FINANCE" and d["pipeline_status"] == "SENT_TO_FINANCE"
 
     d = client.put(f"{BASE}/{rid}/result", json={
         "purchase_date": "1405/09/01", "delivery_status": "DELIVERED", "final_extra_costs": 500,
         "lines": [{"item_id": iid, "purchased_quantity": 10}], "complete": True}, headers=h).get_json()["data"]
-    assert d["status"] == "COMPLETED"
+    assert d["status"] == "COMPLETED" and d["status_label"] == "پایان‌یافته"
     assert d["final_amount"] == 950 * 10 + 500
     assert d["savings"] == (1100 - 950) * 10          # (reference - final) x quantity
     kinds = [e["to_status"] for e in d["events"] if e["kind"] == "STATUS"]
@@ -105,6 +115,7 @@ def test_savings_not_computed_without_approved_reference(client, world):
     d = client.put(f"{BASE}/{rid}/inquiries", json={"inquiries": [inquiry(world, 0, 900, item_id=iid)],
                    "shortfall_reason": "تنها تأمین‌کنندهٔ موجود", "complete": True}, headers=h).get_json()["data"]
     client.put(f"{BASE}/{rid}/selection", json={"inquiry_id": d["inquiries"][0]["id"], "reasons": ["LOWEST_PRICE"], "complete": True}, headers=h)
+    client.post(f"{BASE}/{rid}/send-to-finance", headers=h)
     d = client.put(f"{BASE}/{rid}/result", json={"purchase_date": "1405/09/01", "delivery_status": "DELIVERED",
                    "lines": [{"item_id": iid, "purchased_quantity": 10}], "complete": True}, headers=h).get_json()["data"]
     assert d["status"] == "COMPLETED" and d["savings"] is None
@@ -149,7 +160,7 @@ def test_items_locked_once_inquiries_exist(client, world):
     iid = item_id(client, h, rid)
     client.put(f"{BASE}/{rid}/inquiries", json={"inquiries": [inquiry(world, 0, 900, item_id=iid)]}, headers=h)
     extra = [{"id": iid, "category_id": world["cats"][0], "name": "رزین PP", "quantity": 10, "unit": "کیلوگرم"},
-             {"category_id": world["cats"][1], "name": "کیسه", "quantity": 5, "unit": "عدد"}]
+             {"product_id": world["prods"][1], "category_id": world["cats"][1], "quantity": 5, "unit": "عدد"}]
     assert client.put(f"{BASE}/{rid}/items", json={"items": extra}, headers=h).status_code == 409
 
 
@@ -189,6 +200,7 @@ def test_dashboard_matches_the_records(client, world):
     d = client.put(f"{BASE}/{done}/inquiries", json={"inquiries": [inquiry(world, 0, 800, item_id=iid)],
                    "shortfall_reason": "یک تأمین‌کننده", "complete": True}, headers=h).get_json()["data"]
     client.put(f"{BASE}/{done}/selection", json={"inquiry_id": d["inquiries"][0]["id"], "reasons": ["LOWEST_PRICE"], "complete": True}, headers=h)
+    client.post(f"{BASE}/{done}/send-to-finance", headers=h)
     client.put(f"{BASE}/{done}/result", json={"purchase_date": "1405/09/01", "delivery_status": "DELIVERED",
                "lines": [{"item_id": iid, "purchased_quantity": 10}], "complete": True}, headers=h)
 
@@ -217,10 +229,120 @@ def test_export_follows_filters(client, world):
     assert len(client.get(f"{BASE}/export?kind=requests&format=json", headers=h).get_json()["data"]["rows"]) == 1
 
 
-def test_request_numbers_are_unique_and_audit_is_written(client, world):
+def test_request_numbers_are_typed_by_the_expert(client, world):
     from app.core.audit_logs.models import AuditLog
     h = staff(*ALL)
-    a, b = new_request(client, h, world), new_request(client, h, world)
-    nos = {client.get(f"{BASE}/{i}", headers=h).get_json()["data"]["request_no"] for i in (a, b)}
-    assert len(nos) == 2
-    assert db.session.query(AuditLog).filter_by(module="procurement", action="create").count() == 2
+    r = client.post(BASE, json=basic(request_no=""), headers=h)
+    assert r.status_code == 400 and r.get_json()["error"]["details"][0]["field"] == "request_no"   # never auto-numbered
+    a = client.post(BASE, json=basic(request_no="ک-1405/17"), headers=h).get_json()["data"]
+    assert a["request_no"] == "ک-1405/17"
+    assert client.post(BASE, json=basic(request_no="ک-1405/17"), headers=h).status_code == 400    # duplicate
+    b = client.post(BASE, json=basic(request_no="77"), headers=h).get_json()["data"]
+    assert client.put(f"{BASE}/{b['id']}/basic", json={"request_no": "ک-1405/17"}, headers=h).status_code == 400
+    ok = client.put(f"{BASE}/{b['id']}/basic", json={"request_no": "  78  "}, headers=h).get_json()["data"]
+    assert ok["request_no"] == "78"                                                                  # editable afterwards
+    assert db.session.query(AuditLog).filter_by(module="procurement", action="update_basic").count() == 1
+
+
+def test_review_status_cartable_and_rejected_stay(client, world):
+    h = staff(*ALL)
+    viewer = staff("procurement.purchase.read")
+    rid = new_request(client, h, world)
+    d = client.get(f"{BASE}/{rid}", headers=h).get_json()["data"]
+    assert d["review_status"] == "PENDING_REVIEW" and d["review_label"] == "در انتظار بررسی"
+    assert client.post(f"{BASE}/{rid}/review", json={"status": "APPROVED"}, headers=viewer).status_code == 403
+    assert client.post(f"{BASE}/{rid}/review", json={"status": "NEEDS_REVISION"}, headers=h).status_code == 400   # reason needed
+    d = client.post(f"{BASE}/{rid}/review", json={"status": "NEEDS_REVISION", "note": "فرم کاغذی ناقص بود"}, headers=h).get_json()["data"]
+    assert d["review_status"] == "NEEDS_REVISION" and d["review_note"] == "فرم کاغذی ناقص بود"
+    d = client.post(f"{BASE}/{rid}/review", json={"status": "REJECTED", "note": "بودجه ندارد"}, headers=h).get_json()["data"]
+    assert d["review_status"] == "REJECTED" and any(e["kind"] == "REVIEW" for e in d["events"])
+    # rejected: still listed, filterable, counted, but frozen until the expert changes the status
+    assert client.get(f"{BASE}?review_status=REJECTED", headers=h).get_json()["meta"]["total"] == 1
+    assert client.put(f"{BASE}/{rid}/basic", json={"subject": "x"}, headers=h).status_code == 409
+    dash = client.get(f"{BASE}/dashboard", headers=h).get_json()["data"]
+    assert {c["status"]: c["count"] for c in dash["review_counts"]}["REJECTED"] == 1
+    assert dash["kpis"]["total"]["value"] == 1 and dash["kpis"]["open"]["value"] == 0      # counted in total, not "open"
+    client.post(f"{BASE}/{rid}/review", json={"status": "PENDING_REVIEW"}, headers=h)
+    assert client.put(f"{BASE}/{rid}/basic", json={"subject": "x"}, headers=h).status_code == 200
+
+
+def test_direct_purchase_without_request_feeds_the_dashboard(client, world):
+    h = staff(*ALL)
+    body = {"doc_no": "D-17/الف", "purchase_date": "1405/08/10", "title": "تعمیر پمپ", "supplier_id": world["sups"][0],
+            "amount": 12500000, "usage_place": "سالن تولید ۲", "category_id": world["cats"][0]}
+    made = client.post(f"{BASE}/direct", json=body, headers=h).get_json()["data"]
+    assert made["amount"] == 12500000 and made["supplier_name"] == "تأمین 0"
+    assert client.post(f"{BASE}/direct", json=body, headers=h).status_code == 400            # same document number
+    free = {**body, "doc_no": "D-18", "supplier_id": None, "supplier_name": "فروشگاه محلی", "amount": 500000}
+    assert client.post(f"{BASE}/direct", json=free, headers=h).status_code == 201            # vendor outside the supplier bank
+    assert client.post(f"{BASE}/direct", json={**free, "doc_no": "D-19", "amount": 10.5}, headers=h).status_code == 400
+    lst = client.get(f"{BASE}/direct", headers=h).get_json()
+    assert lst["meta"]["total"] == 2 and lst["meta"]["total_amount"] == 13000000
+
+    dash = client.get(f"{BASE}/dashboard", headers=h).get_json()["data"]
+    assert dash["kpis"]["direct"] == {"value": 2, "amount": 13000000}
+    assert dash["kpis"]["spent"]["value"] == 13000000 and dash["kpis"]["total"]["value"] == 0   # no request was needed
+    grp = {g["name"]: g for g in dash["groups"]}["پلیمر و رزین"]
+    assert grp["direct_count"] == 2 and grp["spent"] == 13000000
+    assert {s["name"]: s["direct_amount"] for s in dash["suppliers"]}["فروشگاه محلی"] == 500000
+    # request-only filters leave them out; date / group / supplier filters apply to them
+    assert client.get(f"{BASE}/dashboard?status=COMPLETED", headers=h).get_json()["data"]["kpis"]["direct"]["value"] == 0
+    assert client.get(f"{BASE}/dashboard?supplier=محلی", headers=h).get_json()["data"]["kpis"]["direct"]["value"] == 1
+    j = client.get(f"{BASE}/export?kind=direct&format=json", headers=h).get_json()["data"]
+    assert len(j["rows"]) == 2
+    upd = client.put(f"{BASE}/direct/{made['id']}", json={"amount": 99000}, headers=h).get_json()["data"]
+    assert upd["amount"] == 99000
+    assert client.delete(f"{BASE}/direct/{made['id']}", headers=staff("procurement.purchase.read")).status_code == 403
+    assert client.delete(f"{BASE}/direct/{made['id']}", headers=h).status_code == 200
+
+
+# ── catalog, codes, units, finance step, IRR ─────────────────────────
+def test_catalog_is_admin_managed_and_code_is_free_text(client, world):
+    admin, expert = staff(*ALL), staff("procurement.purchase.read", "procurement.purchase.create", "procurement.purchase.update")
+    body = {"name": "گریس صنعتی", "code": "0045-B/تست"}
+    assert client.post(f"{BASE}/products", json=body, headers=expert).status_code == 403
+    made = client.post(f"{BASE}/products", json=body, headers=admin).get_json()["data"]
+    assert made["code"] == "0045-B/تست"                                  # leading zeros / letters / separators kept as typed
+    assert client.post(f"{BASE}/products", json={"name": "گریس صنعتی"}, headers=admin).status_code == 400   # duplicate name
+    assert client.post(f"{BASE}/products", json={"name": "دیگر", "code": "0045-b/تست"}, headers=admin).status_code == 400  # duplicate code
+    assert client.post(f"{BASE}/products", json={"name": "بد", "code": "ab$%"}, headers=admin).status_code == 400
+    assert client.post(f"{BASE}/products", json={"name": "بدون کد"}, headers=admin).status_code == 201
+    found = client.get(f"{BASE}/products?q=گریس", headers=expert).get_json()["data"]    # the wizard can search it
+    assert [p["code"] for p in found] == ["0045-B/تست"]
+
+
+def test_item_must_come_from_catalog_and_keeps_its_code(client, world):
+    h = staff(*ALL)
+    rid = client.post(BASE, json=basic(), headers=h).get_json()["data"]["id"]
+    free = [{"category_id": world["cats"][0], "name": "آزاد", "quantity": 1, "unit": "عدد"}]
+    assert client.put(f"{BASE}/{rid}/items", json={"items": free}, headers=h).status_code == 400
+    ok = [{"product_id": world["prods"][0], "category_id": world["cats"][0], "name": "هرچه", "quantity": 1, "unit": "بسته ۲۵ کیلویی"}]
+    d = client.put(f"{BASE}/{rid}/items", json={"items": ok}, headers=h).get_json()["data"]
+    assert d["items"][0]["name"] == "رزین PP" and d["items"][0]["product_code"] == "RS-0012/A"
+    assert d["items"][0]["unit"] == "بسته ۲۵ کیلویی"                     # any unit is accepted
+    assert "بسته ۲۵ کیلویی" in client.get(f"{BASE}/units?q=بسته", headers=h).get_json()["data"]
+    used = client.delete(f"{BASE}/products/{world['prods'][0]}", headers=h)
+    assert used.status_code == 409                                       # in use: deactivate instead
+
+
+def test_result_needs_send_to_finance_and_statuses(client, world):
+    h = staff(*ALL)
+    rid = new_request(client, h, world)
+    iid = item_id(client, h, rid)
+    d = client.put(f"{BASE}/{rid}/inquiries", json={"inquiries": [inquiry(world, 0, 900, item_id=iid)],
+                   "shortfall_reason": "یک تأمین‌کننده", "complete": True}, headers=h).get_json()["data"]
+    assert client.put(f"{BASE}/{rid}/inquiries", json={"inquiries": [inquiry(world, 0, 900, item_id=iid)]}, headers=h).get_json()["data"]["status"] in ("INQUIRING", "AWAITING_SELECTION")
+    client.put(f"{BASE}/{rid}/selection", json={"inquiry_id": d["inquiries"][0]["id"], "reasons": ["QUALITY"], "complete": True}, headers=h)
+    res = {"purchase_date": "1405/09/01", "delivery_status": "NOT_DELIVERED", "lines": [{"item_id": iid, "purchased_quantity": 10}], "complete": True}
+    r = client.put(f"{BASE}/{rid}/result", json=res, headers=h)
+    assert r.status_code == 400                                          # not sent to finance yet
+    assert client.post(f"{BASE}/{rid}/send-to-finance", headers=h).get_json()["data"]["status_label"] == "ارسال به مالی"
+    d = client.put(f"{BASE}/{rid}/result", json=res, headers=h).get_json()["data"]
+    assert d["status"] == "AWAITING_DELIVERY" and d["status_label"] == "در حال تحویل و حمل"
+
+
+def test_prices_are_whole_rials(client, world):
+    h = staff(*ALL)
+    rid = client.post(BASE, json=basic(), headers=h).get_json()["data"]["id"]
+    bad = [{"product_id": world["prods"][0], "category_id": world["cats"][0], "quantity": 1, "unit": "عدد", "estimated_unit_price": 10.5}]
+    assert client.put(f"{BASE}/{rid}/items", json={"items": bad}, headers=h).status_code == 400

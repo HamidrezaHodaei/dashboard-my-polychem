@@ -21,7 +21,7 @@
           <Label>روش ارسال</Label>
           <Select v-model="methodModel">
             <SelectTrigger class="w-full"><SelectValue placeholder="انتخاب کنید" /></SelectTrigger>
-            <SelectContent><SelectItem v-for="m in DELIVERY_METHODS" :key="m" :value="m">{{ m }}</SelectItem></SelectContent>
+            <SelectContent><SelectItem v-for="m in methodOptions" :key="m" :value="m">{{ m }}</SelectItem></SelectContent>
           </Select>
         </div>
         <div class="space-y-1.5">
@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { DELIVERY_METHODS, UNIT_OPTIONS } from '~/utils/requestSample'
+import { UNIT_OPTIONS } from '~/utils/requestSample'
 import { todayIso, toPersianDigits } from '~/utils/jalali'
 
 const props = defineProps<{ open: boolean, requestId: number, defaults?: { reference?: string | null, recipient?: string | null, method?: string | null }, saving?: boolean }>()
@@ -87,9 +87,15 @@ const pending = ref<File[]>([])
 const uploading = ref(false)
 const input = ref<HTMLInputElement | null>(null)
 const methodModel = computed({ get: () => f.delivery_method || undefined, set: (v: string | undefined) => { f.delivery_method = v ?? '' } })
+// admin-managed list; the request's own method stays selectable even if the admin has since changed the list
+const methodOptions = computed(() => {
+  const names = store.deliveryMethods.map(m => m.name)
+  return f.delivery_method && !names.includes(f.delivery_method) ? [f.delivery_method, ...names] : names
+})
 
 watch(() => props.open, (v) => {
   if (!v) return
+  store.loadDeliveryMethods()
   Object.assign(f, blank(), { reference_number: props.defaults?.reference ?? '', recipient_name: props.defaults?.recipient ?? '', delivery_method: props.defaults?.method ?? '' })
   Object.keys(err).forEach(k => delete err[k])
   pending.value = []

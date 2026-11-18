@@ -10,7 +10,7 @@ from tests.core4.factories import auth_headers, grant_user_permission, make_perm
 
 BASE = "/api/crm/request-samples"
 CORE = ("read", "create", "update", "delete")
-EXTRA = ("approve", "reject", "dispatch", "follow_up", "feedback", "convert", "export")
+EXTRA = ("approve", "reject", "dispatch", "follow_up", "feedback", "convert", "export", "manage_catalog")
 
 
 def _staff(*actions):
@@ -45,7 +45,7 @@ _REF = iter(range(1, 10_000))
 def _body(customer_id, **over):
     body = {
         "customer_id": customer_id, "dispatch_ref_number": f"SMP-{next(_REF)}", "recipient_name": "علی", "delivery_address": "تهران",
-        "city": "تهران", "items": [{"product_name": "پلی‌اتیلن", "grade": "HD5218", "quantity": "10", "unit": "kg"}],
+        "city": "تهران", "items": [{"grade": "HD5218", "quantity": "10", "unit": "kg"}],
     }
     body.update(over)
     return body
@@ -187,7 +187,7 @@ def test_list_filters_search_and_analytics(client, rep, manager, customer):
     assert [x["id"] for x in client.get(BASE, query_string={"status": "PENDING_APPROVAL"}, headers=h).get_json()["data"]] == [other["id"]]
     a = client.get(f"{BASE}/analytics", headers=h).get_json()["data"]
     assert a["kpis"]["total"] == 2 and a["kpis"]["pending"] == 1 and a["kpis"]["approved"] == 1 and a["kpis"]["dispatched"] == 1
-    assert a["top_products"][0]["product"] == "پلی‌اتیلن" and a["top_products"][0]["requests"] == 2
+    assert a["top_products"][0]["grade"] == "HD5218" and a["top_products"][0]["requests"] == 2
     assert sum(t["count"] for t in a["trend"]) == 2
     assert a["conversion"]["dispatched"] == 1
 
@@ -203,6 +203,59 @@ def test_dispatch_reference_is_unique(client, rep, customer):
     _create(client, rep[1], customer, dispatch_ref_number="SMP-DUP")
     r = client.post(BASE, json=_body(customer, dispatch_ref_number="smp-dup"), headers=rep[1])
     assert r.status_code == 409
+
+
+# ── product = grade only ─────────────────────────────────────────────
+def test_item_is_identified_by_grade_only(client, rep, customer):
+    d = _create(client, rep[1], customer)
+    assert d["items"][0]["grade"] == "HD5218" and "product_name" not in d["items"][0]
+    assert d["grade"] == "HD5218" and "product" not in d
+    base = _body(customer)["items"][0]
+    for removed in ({"product_name": "x"}, {"product_category": "x"}, {"alternative_product": "x"}):
+        r = client.post(BASE, json=_body(customer, items=[{**base, **removed}]), headers=rep[1])
+        assert r.status_code == 400, removed  # the removed fields are rejected, not silently stored
+    no_grade = {k: v for k, v in base.items() if k != "grade"}
+    assert client.post(BASE, json=_body(customer, items=[no_grade]), headers=rep[1]).status_code == 400
+
+
+# ── delivery methods (admin-managed) ─────────────────────────────────
+def test_delivery_method_crud_needs_manage_catalog(client, rep, customer):
+    admin = _staff("read", "manage_catalog")[1]
+    url = f"{BASE}/delivery-methods"
+    r = client.post(url, json={"name": "پیک موتوری", "sort_order": 10}, headers=admin)
+    assert r.status_code == 201, r.get_json()
+    mid = r.get_json()["data"]["id"]
+    assert client.post(url, json={"name": "  پیک موتوری "}, headers=admin).status_code == 409  # unique
+    assert client.post(url, json={"name": "باربری"}, headers=rep[1]).status_code == 403
+    assert client.put(f"{url}/{mid}", json={"name": "پیک"}, headers=rep[1]).status_code == 403
+    assert client.delete(f"{url}/{mid}", headers=rep[1]).status_code == 403
+    assert client.put(f"{url}/{mid}", json={"name": "پیک شهری"}, headers=admin).get_json()["data"]["name"] == "پیک شهری"
+    # everyone with `read` gets the active list for the form; disabled ones are hidden from it
+    assert [m["name"] for m in client.get(url, headers=rep[1]).get_json()["data"]] == ["پیک شهری"]
+    client.put(f"{url}/{mid}", json={"is_active": False}, headers=admin)
+    assert client.get(url, headers=rep[1]).get_json()["data"] == []
+    assert client.get(url, query_string={"include_inactive": 1}, headers=rep[1]).get_json()["data"] == []  # not for reps
+    assert len(client.get(url, query_string={"include_inactive": 1}, headers=admin).get_json()["data"]) == 1
+    assert client.delete(f"{url}/{mid}", headers=admin).status_code == 200
+    assert client.delete(f"{url}/{mid}", headers=admin).status_code == 404
+
+
+def test_request_uses_only_active_delivery_methods(client, rep, manager, customer):
+    admin = _staff("read", "manage_catalog")[1]
+    url = f"{BASE}/delivery-methods"
+    mid = client.post(url, json={"name": "باربری"}, headers=admin).get_json()["data"]["id"]
+    assert client.post(BASE, json=_body(customer, delivery_method="ناشناخته"), headers=rep[1]).status_code == 400
+    d = _create(client, rep[1], customer, delivery_method="باربری")
+    assert d["delivery_method"] == "باربری"
+    # renaming / disabling the entry later does not break the request that already carries it
+    client.put(f"{url}/{mid}", json={"is_active": False}, headers=admin)
+    body = _body(customer, delivery_method="باربری", dispatch_ref_number=d["dispatch_ref_number"])
+    assert client.put(f"{BASE}/{d['id']}", json=body, headers=rep[1]).status_code == 200
+    assert client.get(f"{BASE}/{d['id']}", headers=rep[1]).get_json()["data"]["delivery_method"] == "باربری"
+    # a shipment is validated the same way
+    rid = _approved(client, rep, manager, customer)
+    assert _dispatch(client, manager, rid, delivery_method="ناشناخته").status_code == 400
+    assert _dispatch(client, manager, rid, delivery_method=None).status_code == 201
 
 
 # ── daily reminders ──────────────────────────────────────────────────

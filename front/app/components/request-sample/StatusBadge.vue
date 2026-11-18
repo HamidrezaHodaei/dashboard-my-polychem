@@ -1,7 +1,7 @@
 <!-- <RequestSampleStatusBadge status="APPROVED" /> | kind="priority" | kind="feedback" -->
 <template>
   <span
-    class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium"
+    class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium dark:border-white/15"
     :class="meta.cls"
   >
     <i

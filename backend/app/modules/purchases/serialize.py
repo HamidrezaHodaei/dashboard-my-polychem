@@ -23,7 +23,8 @@ def item_dict(req, item) -> dict:
     est = None if item.estimated_unit_price is None else S.num(S._dec(item.quantity) * S._dec(item.estimated_unit_price))
     sav = S.item_savings(item) if req.status.value == "COMPLETED" else None
     return {
-        "id": item.id, "position": item.position, "category_id": item.category_id, "category_name": item.category_name,
+        "id": item.id, "position": item.position, "product_id": item.product_id, "product_code": item.product_code,
+        "category_id": item.category_id, "category_name": item.category_name,
         "name": item.name, "specs": item.specs, "brand_model": item.brand_model,
         "quantity": S.num(item.quantity), "unit": item.unit,
         "estimated_unit_price": S.num(item.estimated_unit_price), "estimated_total": est,
@@ -63,8 +64,8 @@ def events_for(request_id: int) -> list[dict]:
     return [{
         "id": e.id, "kind": e.kind, "kind_label": L.EVENT_KIND.get(e.kind, e.kind),
         "step": e.step, "step_label": L.STEP.get(e.step) if e.step else None,
-        "from_status": e.from_status, "from_label": L.STATUS.get(e.from_status) if e.from_status else None,
-        "to_status": e.to_status, "to_label": L.STATUS.get(e.to_status) if e.to_status else None,
+        "from_status": e.from_status, "from_label": (L.REVIEW if e.kind == "REVIEW" else L.STATUS).get(e.from_status) if e.from_status else None,
+        "to_status": e.to_status, "to_label": (L.REVIEW if e.kind == "REVIEW" else L.STATUS).get(e.to_status) if e.to_status else None,
         "note": e.note, "user_name": e.user_name, "at": _stamp(e.created_at),
     } for e in rows]
 
@@ -76,7 +77,11 @@ def request_dict(req, actor=None) -> dict:
     counted = [s for s in savings if s is not None]
     data = {
         "id": req.id, "request_no": req.request_no, "status": req.status.value, "status_label": L.STATUS[req.status.value],
-        "status_note": req.status_note, "current_step": req.current_step,
+        "status_note": req.status_note,
+        "review_status": req.review_status.value, "review_label": L.REVIEW[req.review_status.value],
+        "review_note": req.review_note, "reviewed_at": _stamp(req.reviewed_at), "reviewed_by_name": req.reviewed_by_name,
+        "pipeline_status": S.pipeline_status(req).value,
+        "sent_to_finance_at": _stamp(req.sent_to_finance_at), "current_step": req.current_step,
         "requester_unit": req.requester_unit, "requester_name": req.requester_name,
         "request_date": _d(req.request_date), "request_date_jalali": _j(req.request_date),
         "subject": req.subject, "priority": req.priority.value, "priority_label": L.PRIORITY[req.priority.value],

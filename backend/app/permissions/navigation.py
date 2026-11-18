@@ -37,16 +37,19 @@ def _resource_prefix(permission: str) -> str:
     return f"{module}.{resource}."
 
 
-def _entry(key: str, label: str, path: str, permission: str) -> dict:
+def _entry(key: str, label: str, path: str, permission: str, also_gated_by: tuple[str, ...] = ()) -> dict:
     if permission not in REGISTRY:
         raise KeyError(
             f"Navigation entry {key!r} references undefined permission {permission!r}"
         )
+    for extra in also_gated_by:
+        if extra not in REGISTRY:
+            raise KeyError(f"Navigation entry {key!r} references undefined permission {extra!r}")
     prefix = _resource_prefix(permission)
     # export / print are not a reason to show a section on their own (they only matter next to `read`)
     gating_permissions = tuple(
         k for k in REGISTRY if k.startswith(prefix) and k.rsplit(".", 1)[-1] not in ("export", "print")
-    )
+    ) + tuple(also_gated_by)
     return {
         "key": key,
         "label": label,
@@ -79,9 +82,14 @@ _NAVIGATION_CATALOG: list[dict] = [
     _entry("crm_sales", "Sales", "/crm/sales", "crm.sale.read"),
     _entry("crm_dashboard", "Sales Dashboard", "/crm/dashboard", "crm.sale.read"),
     _entry("request_samples", "Request Sample", "/crm/request-samples", "crm.request_sample.read"),
-    _entry("crm_settings", "CRM Settings", "/crm/settings", "crm.product.read"),
+    # the settings page also hosts the sample delivery methods, so their admin permission opens it too
+    _entry("crm_settings", "CRM Settings", "/crm/settings", "crm.product.read",
+           also_gated_by=("crm.request_sample.manage_catalog",)),
     _entry("logistics_companies", "Transport Companies", "/logistics/companies", "logistics.company.read"),
     _entry("logistics_drivers", "Drivers", "/logistics/drivers", "logistics.driver.read"),
+    # Correspondence (مکاتبات): also visible when the user's organizational unit was given access
+    # (app/modules/mail/access.py) -- see `resolve_navigation`.
+    _entry("correspondence", "Correspondence", "/mail", "correspondence.mail.read"),
 ]
 
 
@@ -97,9 +105,19 @@ def resolve_navigation(user: User) -> list[dict]:
     """
     held_permission_keys = {grant.permission_key for grant in get_effective_grants(user)}
 
+    # Correspondence can also be opened to a whole unit (department); that is not a grant row, so it
+    # is resolved by the mail module itself. Imported lazily: the mail module imports this package.
+    from app.modules.mail.access import can_read_mail
+
+    mail_visible = can_read_mail(user)
+
     visible = []
     for entry in _NAVIGATION_CATALOG:
-        if held_permission_keys.intersection(entry["_gating_permissions"]):
+        if entry["key"] == "correspondence":
+            allowed = mail_visible
+        else:
+            allowed = bool(held_permission_keys.intersection(entry["_gating_permissions"]))
+        if allowed:
             visible.append(
                 {
                     "key": entry["key"],

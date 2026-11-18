@@ -140,7 +140,7 @@
       <div v-show="tab === 'products'" class="space-y-3">
         <Card v-for="(it, i) in d.items" :key="it.id ?? i" class="gap-3 p-5 shadow-none">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-base font-semibold" dir="auto">{{ toPersianDigits(i + 1) }}. {{ it.product_name }}<span v-if="it.grade" class="font-normal text-muted-foreground"> · {{ it.grade }}</span></h2>
+            <h2 class="text-base font-semibold" dir="auto">{{ toPersianDigits(i + 1) }}. {{ it.grade || '—' }}</h2>
             <Badge variant="secondary" dir="ltr">{{ it.quantity }} {{ it.unit }} × {{ it.number_of_samples }}</Badge>
           </div>
           <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
@@ -155,9 +155,9 @@
         <h2 class="text-base font-semibold">مشخصات نمونهٔ درخواستی</h2>
         <div class="overflow-x-auto">
           <Table>
-            <TableHeader><TableRow><TableHead>محصول</TableHead><TableHead>گرید</TableHead><TableHead>مقدار</TableHead><TableHead>تعداد بسته</TableHead><TableHead>بسته‌بندی</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>گرید</TableHead><TableHead>مقدار</TableHead><TableHead>تعداد بسته</TableHead><TableHead>بسته‌بندی</TableHead></TableRow></TableHeader>
             <TableBody>
-              <TableRow v-for="(it, i) in d.items" :key="i"><TableCell dir="rtl">{{ it.product_name }}</TableCell><TableCell dir="rtl">{{ it.grade || '—' }}</TableCell><TableCell dir="rtl">{{ it.quantity }} {{ it.unit }}</TableCell><TableCell>{{ toPersianDigits(it.number_of_samples) }}</TableCell><TableCell dir="rtl">{{ it.packaging || '—' }}</TableCell></TableRow>
+              <TableRow v-for="(it, i) in d.items" :key="i"><TableCell dir="rtl">{{ it.grade || '—' }}</TableCell><TableCell dir="rtl">{{ it.quantity }} {{ it.unit }}</TableCell><TableCell>{{ toPersianDigits(it.number_of_samples) }}</TableCell><TableCell dir="rtl">{{ it.packaging || '—' }}</TableCell></TableRow>
             </TableBody>
           </Table>
         </div>
@@ -402,7 +402,7 @@ const overviewRows = computed(() => {
   return [
     { label: 'مشتری', value: x.customer.name }, { label: 'کارشناس فروش', value: x.sales_rep.name ?? '' },
     { label: 'اولویت', value: PRIORITY_META[x.priority]?.label ?? '' }, { label: 'شمارهٔ حوالهٔ نمونه', value: x.dispatch_ref_number ?? '' },
-    { label: 'محصولات', value: x.items.map(i => `${i.product_name}${i.grade ? ` · ${i.grade}` : ''} — ${i.quantity} ${i.unit} × ${i.number_of_samples}`).join('\n'), wide: true },
+    { label: 'گریدها', value: x.items.map(i => `${i.grade ?? '—'} — ${i.quantity} ${i.unit} × ${i.number_of_samples}`).join('\n'), wide: true },
     { label: 'هدف ارسال نمونه', value: x.purpose ?? '' }, { label: 'تاریخ موردنیاز', value: x.required_delivery_date ? fmtDate(x.required_delivery_date) : '' },
     { label: 'ثبت نهایی در', value: x.submitted_at ? fmtStamp(x.submitted_at) : '' },
     { label: 'یادداشت داخلی', value: x.internal_notes ?? '', wide: true },

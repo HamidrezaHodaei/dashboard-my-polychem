@@ -9,6 +9,7 @@ Request Sample business logic. Permissions are `crm.request_sample.<action>` and
     feedback                                       record the customer's FINAL feedback
     convert                                        turn an accepted sample into sales
     export                                         Excel / Word of the list
+    manage_catalog                                 add / edit / delete the sample delivery methods (admin)
 
 Workflow (status values in models.SampleStatus):
 
@@ -34,11 +35,11 @@ from app.modules.customers.services import _option_dict
 from app.modules.notifications import services as notifications
 from app.modules.request_samples import files, reminders
 from app.modules.request_samples.models import (
-    TERMINAL, RequestSample, RequestSampleDispatch, RequestSampleEvent, RequestSampleFile,
-    RequestSampleFollowUp, RequestSampleItem, SampleStatus,
+    TERMINAL, RequestSample, RequestSampleDeliveryMethod, RequestSampleDispatch, RequestSampleEvent,
+    RequestSampleFile, RequestSampleFollowUp, RequestSampleItem, SampleStatus,
 )
 from app.modules.request_samples.schemas import (
-    DeliveryIn, DispatchIn, FeedbackIn, FollowUpIn, RequestIn, TransitionIn,
+    DeliveryIn, DeliveryMethodIn, DeliveryMethodUpdate, DispatchIn, FeedbackIn, FollowUpIn, RequestIn, TransitionIn,
 )
 from app.permissions.exceptions import PermissionDeniedError
 from app.permissions.service import has_permission
@@ -234,8 +235,8 @@ def _validate_for_submit(req: RequestSample) -> None:
     if not req.items:
         raise InvalidInputError("Add at least one product.", "items")
     for i, it in enumerate(req.items):
-        if not it.product_name or float(it.quantity or 0) <= 0:
-            raise InvalidInputError(f"Product row {i + 1}: name and quantity are required.", "items")
+        if not (it.grade or "").strip() or float(it.quantity or 0) <= 0:
+            raise InvalidInputError(f"Product row {i + 1}: grade and quantity are required.", "items")
     for field, label in (("recipient_name", "recipient name"), ("delivery_address", "delivery address"), ("city", "city")):
         if not getattr(req, field):
             raise InvalidInputError(f"Shipping information: {label} is required.", field)
@@ -261,14 +262,27 @@ _SCALARS = (
 )
 
 
+def _check_delivery_method(value: str | None, current: str | None = None) -> None:
+    """A delivery method must be one of the ACTIVE catalogue entries. A request that already carries
+    a value (possibly renamed / disabled / deleted since) may keep it unchanged."""
+    if not value or value == current:
+        return
+    ok = db.session.query(RequestSampleDeliveryMethod.id).filter(
+        RequestSampleDeliveryMethod.name == value, RequestSampleDeliveryMethod.is_active.is_(True),
+    ).first()
+    if ok is None:
+        raise InvalidInputError("The selected delivery method is not available.", "delivery_method")
+
+
 def _apply(req: RequestSample, payload: RequestIn) -> None:
+    _check_delivery_method(payload.delivery_method, req.delivery_method)
     for f in _SCALARS:
         setattr(req, f, getattr(payload, f))
     req.items.clear()
     db.session.flush()
     for it in payload.items:
         req.items.append(RequestSampleItem(
-            product_name=it.product_name, grade=it.grade, quantity=it.quantity, unit=it.unit,
+            grade=it.grade, quantity=it.quantity, unit=it.unit,
             number_of_samples=it.number_of_samples, packaging=it.packaging, specifications=it.specifications,
         ))
 
@@ -334,7 +348,7 @@ def new_request_from(actor: User, request_id: int, *, ip_address: str | None) ->
             setattr(req, f, getattr(src, f))
     for it in src.items:
         req.items.append(RequestSampleItem(
-            product_name=it.product_name, grade=it.grade, quantity=it.quantity, unit=it.unit,
+            grade=it.grade, quantity=it.quantity, unit=it.unit,
             number_of_samples=it.number_of_samples, packaging=it.packaging, specifications=it.specifications,
         ))
     db.session.add(req)
@@ -424,6 +438,7 @@ def add_dispatch(actor: User, request_id: int, payload: DispatchIn, *, ip_addres
     req = get_visible(actor, request_id)
     if not viewer_flags(actor, req)["can_dispatch"]:
         raise PermissionDeniedError("permission_denied", "Shipments can be recorded only for an approved request, with the dispatch permission.")
+    _check_delivery_method(payload.delivery_method, req.delivery_method)
     row = RequestSampleDispatch(
         request_id=req.id, dispatch_date=payload.dispatch_date, reference_number=payload.reference_number,
         delivery_method=payload.delivery_method, tracking_number=payload.tracking_number, carrier=payload.carrier,
@@ -616,7 +631,7 @@ def parse_filters(args) -> dict:
 
     f = {
         "search": (args.get("search") or "").strip(), "statuses": many("status"), "priorities": many("priority"),
-        "customer_id": args.get("customer_id", type=int), "product": (args.get("product") or "").strip(),
+        "customer_id": args.get("customer_id", type=int),
         "grade": (args.get("grade") or "").strip(), "rep_id": args.get("rep_id", type=int),
         "feedback": (args.get("feedback") or "").strip(), "date_from": d("date_from"), "date_to": d("date_to"),
         "followup_overdue": (args.get("followup_overdue") or "").lower() in ("1", "true"),
@@ -664,9 +679,8 @@ def _query(actor: User, f: dict):
         q = q.filter(RequestSample.requested_date >= f["date_from"])
     if f["date_to"]:
         q = q.filter(RequestSample.requested_date <= f["date_to"])
-    for field, col in (("product", RequestSampleItem.product_name), ("grade", RequestSampleItem.grade)):
-        if f[field]:
-            q = q.filter(exists().where(and_(RequestSampleItem.request_id == RequestSample.id, col == f[field])))
+    if f["grade"]:
+        q = q.filter(exists().where(and_(RequestSampleItem.request_id == RequestSample.id, RequestSampleItem.grade == f["grade"])))
     if f["followup_overdue"]:
         today = tehran_today()
         q = q.filter(
@@ -702,27 +716,108 @@ def all_requests(actor: User, f: dict) -> list[RequestSample]:
 
 
 def options(actor: User) -> dict:
-    """Pickers for filters: reps, product / grade names used, statuses are static on the client."""
+    """Pickers for filters: reps and the grades used; statuses are static on the client."""
     _require(actor, "read")
     reps = (
         db.session.query(User.id, User.full_name).join(RequestSample, RequestSample.sales_rep_user_id == User.id)
         .filter(RequestSample.deleted_at.is_(None)).distinct().order_by(User.full_name).all()
     )
-    products = [r[0] for r in db.session.query(RequestSampleItem.product_name).distinct().order_by(RequestSampleItem.product_name).all()]
     grades = [r[0] for r in db.session.query(RequestSampleItem.grade).filter(RequestSampleItem.grade.isnot(None)).distinct().order_by(RequestSampleItem.grade).all()]
-    return {"reps": [{"id": i, "name": n} for i, n in reps], "products": products, "grades": grades}
+    return {"reps": [{"id": i, "name": n} for i, n in reps], "grades": grades}
 
 
 def product_options(actor: User) -> list[dict]:
-    """Customer-bank pick-lists the request form needs (consumed products + grades), served under the
-    request-sample permission so a rep without `crm.customer.read` still sees the lists."""
+    """Customer-bank pick-list the request form needs (the grades), served under the request-sample
+    permission so a rep without `crm.customer.read` still sees the list."""
     _require(actor, "read")
     rows = (
         db.session.query(CustomerOptionItem)
-        .filter(CustomerOptionItem.kind.in_([OptionKind.CONSUMED, OptionKind.GRADE]))
+        .filter(CustomerOptionItem.kind == OptionKind.GRADE)
         .order_by(CustomerOptionItem.kind, CustomerOptionItem.sort_order, CustomerOptionItem.name).all()
     )
     return [_option_dict(o) for o in rows]
+
+
+# ── delivery methods (admin-managed catalogue) ───────────────────────
+def _method_usage(name: str) -> int:
+    """How many live requests / shipments carry this method name (it is stored as text)."""
+    reqs = db.session.query(RequestSample.id).filter(
+        RequestSample.deleted_at.is_(None), RequestSample.delivery_method == name).count()
+    ships = db.session.query(RequestSampleDispatch.id).filter(RequestSampleDispatch.delivery_method == name).count()
+    return reqs + ships
+
+
+def _method_dict(m: RequestSampleDeliveryMethod, *, usage: bool = False) -> dict:
+    data = {"id": m.id, "name": m.name, "sort_order": m.sort_order, "is_active": m.is_active}
+    if usage:
+        data["usage_count"] = _method_usage(m.name)
+    return data
+
+
+def _method_or_404(method_id: int) -> RequestSampleDeliveryMethod:
+    m = db.session.get(RequestSampleDeliveryMethod, method_id)
+    if m is None:
+        raise NotFoundError("Delivery method was not found.")
+    return m
+
+
+def _ensure_unique_method(name: str, exclude_id: int | None = None) -> None:
+    q = db.session.query(RequestSampleDeliveryMethod.id).filter(
+        db.func.lower(RequestSampleDeliveryMethod.name) == name.strip().lower())
+    if exclude_id is not None:
+        q = q.filter(RequestSampleDeliveryMethod.id != exclude_id)
+    if q.first():
+        raise ConflictError(f"A delivery method named '{name}' already exists.")
+
+
+def list_delivery_methods(actor: User, *, include_inactive: bool = False) -> list[dict]:
+    """The request form's dropdown. Inactive entries and usage counts are for the admin screen only."""
+    _require(actor, "read")
+    manage = _can(actor, "manage_catalog")
+    q = db.session.query(RequestSampleDeliveryMethod)
+    if not (include_inactive and manage):
+        q = q.filter(RequestSampleDeliveryMethod.is_active.is_(True))
+    rows = q.order_by(RequestSampleDeliveryMethod.sort_order, RequestSampleDeliveryMethod.id).all()
+    return [_method_dict(m, usage=manage and include_inactive) for m in rows]
+
+
+def create_delivery_method(actor: User, payload: DeliveryMethodIn, *, ip_address: str | None) -> dict:
+    _require(actor, "manage_catalog")
+    _ensure_unique_method(payload.name)
+    m = RequestSampleDeliveryMethod(name=payload.name, sort_order=payload.sort_order, is_active=payload.is_active)
+    db.session.add(m)
+    db.session.flush()
+    write_audit_log(user_id=actor.id, action="create_delivery_method", module=MODULE, entity_type="request_sample_delivery_method",
+                    entity_id=m.id, metadata={"name": m.name}, ip_address=ip_address)
+    db.session.commit()
+    return _method_dict(m, usage=True)
+
+
+def update_delivery_method(actor: User, method_id: int, payload: DeliveryMethodUpdate, *, ip_address: str | None) -> dict:
+    _require(actor, "manage_catalog")
+    m = _method_or_404(method_id)
+    changes = payload.model_dump(exclude_unset=True)
+    if "name" in changes and changes["name"] is not None:
+        _ensure_unique_method(changes["name"], exclude_id=m.id)
+        m.name = changes["name"]
+    if changes.get("sort_order") is not None:
+        m.sort_order = changes["sort_order"]
+    if changes.get("is_active") is not None:
+        m.is_active = changes["is_active"]
+    write_audit_log(user_id=actor.id, action="update_delivery_method", module=MODULE, entity_type="request_sample_delivery_method",
+                    entity_id=m.id, metadata={"name": m.name}, ip_address=ip_address)
+    db.session.commit()
+    return _method_dict(m, usage=True)
+
+
+def delete_delivery_method(actor: User, method_id: int, *, ip_address: str | None) -> None:
+    """Requests keep the name they were saved with, so deleting never damages history."""
+    _require(actor, "manage_catalog")
+    m = _method_or_404(method_id)
+    write_audit_log(user_id=actor.id, action="delete_delivery_method", module=MODULE, entity_type="request_sample_delivery_method",
+                    entity_id=m.id, metadata={"name": m.name}, ip_address=ip_address)
+    db.session.delete(m)
+    db.session.commit()
 
 
 def rep_candidates(actor: User) -> list[dict]:
@@ -762,6 +857,11 @@ def _customer_ref(c: Customer, detail: bool) -> dict:
     return ref
 
 
+def _item_label(it: RequestSampleItem) -> str | None:
+    """The product of a row = its grade. Rows saved before the product name was dropped fall back to it."""
+    return it.grade or it.product_name or None
+
+
 def _qty_label(items) -> str:
     if not items:
         return ""
@@ -779,7 +879,7 @@ def dump(req: RequestSample, actor: User, *, detail: bool = False) -> dict:
         "sales_rep": {"id": req.sales_rep_user_id, "name": req.sales_rep.full_name if req.sales_rep else None},
         "requested_date": req.requested_date.isoformat(), "required_delivery_date": req.required_delivery_date.isoformat() if req.required_delivery_date else None,
         "dispatch_ref_number": req.dispatch_ref_number,
-        "product": items[0].product_name if items else None, "grade": items[0].grade if items else None,
+        "grade": _item_label(items[0]) if items else None,
         "items_count": len(items), "quantity_label": _qty_label(items),
         "feedback_status": req.fb_status, "parent_request_id": req.parent_request_id,
         "created_by_name": req.created_by_name, "created_at": _iso(req.created_at),
@@ -800,7 +900,7 @@ def dump(req: RequestSample, actor: User, *, detail: bool = False) -> dict:
         "delivered_at": req.delivered_at.isoformat() if req.delivered_at else None,
         "delivery_received_by": req.delivery_received_by, "delivery_note": req.delivery_note,
         "items": [{
-            "id": i.id, "product_name": i.product_name, "grade": i.grade,
+            "id": i.id, "grade": _item_label(i),
             "quantity": _num(i.quantity), "unit": i.unit,
             "number_of_samples": i.number_of_samples, "packaging": i.packaging, "specifications": i.specifications,
         } for i in items],
@@ -881,13 +981,13 @@ def analytics(actor: User, f: dict, *, granularity: str = "month", top: int = 8)
         b = buckets.setdefault(key, {"key": key, "label": label, "count": 0})
         b["count"] += 1
     trend = [buckets[k] for k in sorted(buckets)]
-    # top products
-    prod: dict[tuple, dict] = {}
+    # top grades
+    prod: dict[str, dict] = {}
     for r in rows:
         seen = set()
         for it in r.items:
-            k = (it.product_name, it.grade or "")
-            p = prod.setdefault(k, {"product": it.product_name, "grade": it.grade, "requests": 0, "quantity_kg": 0.0})
+            k = _item_label(it) or "—"
+            p = prod.setdefault(k, {"grade": k, "requests": 0, "quantity_kg": 0.0})
             if k not in seen:
                 p["requests"] += 1
                 seen.add(k)

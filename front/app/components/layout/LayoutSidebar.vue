@@ -25,17 +25,19 @@ const baseNav: SidebarProps['nav'] = [
         },
       },
       {
-        title: 'ایمیل',
+        title: 'مکاتبات',
         icon: 'lucide:mail',
         activeRoute: ['/mail'],
+        navKey: 'correspondence',
         children: [
           {
-            title: 'سامانه ایمیل',
+            title: 'مکاتبات سازمانی',
             icon: 'lucide:inbox',
             link: {
               to: '/mail',
             },
             activeRoute: ['/mail'],
+            navKey: 'correspondence',
           },
         ],
       },

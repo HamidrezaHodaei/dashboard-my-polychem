@@ -9,18 +9,22 @@ to sales. Every step is written to `request_sample_events` (the activity timelin
 Integration rules:
 * The customer is the customer bank's row (`customers.id`) -- nothing about a customer is copied here.
 * `creator_name` is the permanent text snapshot of the creator (see core/creator_snapshot.py).
-* Product / grade are stored as the names chosen from the customer bank's lists (PRODUCED / CONSUMED /
-  GRADE pick-lists) so a request still reads correctly if a list entry is later renamed or removed.
+* The product is identified by its GRADE only (the name chosen from the customer bank's GRADE pick-list,
+  stored as text so a request still reads correctly if a list entry is later renamed or removed).
+  `product_name` / `product_category` / `alternative_product` are legacy columns kept for old rows.
+* The delivery method is a text snapshot of an entry of `request_sample_delivery_methods`, a catalogue the
+  administrator maintains (add / edit / delete) -- the same reasoning: renaming or deleting an entry never
+  rewrites history.
 """
 import enum
 from datetime import date, datetime
 
 from sqlalchemy import (
-    JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
+    JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.base import BigIntUnsigned, SoftDeleteMixin, TimestampMixin
+from app.core.base import ActiveFlagMixin, BigIntUnsigned, SoftDeleteMixin, TimestampMixin
 from app.core.creator_snapshot import display_name as _creator_display, register as _register_creator
 from app.extensions import db
 
@@ -182,7 +186,7 @@ class RequestSampleItem(db.Model):
         BigIntUnsigned, ForeignKey("request_samples.id", ondelete="CASCADE"), nullable=False, index=True
     )
     product_category: Mapped[str | None] = mapped_column(String(200), nullable=True)  # legacy, no longer collected
-    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    product_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # legacy, no longer collected
     grade: Mapped[str | None] = mapped_column(String(255), nullable=True)
     alternative_product: Mapped[str | None] = mapped_column(String(255), nullable=True)  # legacy, no longer collected
     quantity: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False)
@@ -190,6 +194,17 @@ class RequestSampleItem(db.Model):
     number_of_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     packaging: Mapped[str | None] = mapped_column(String(200), nullable=True)
     specifications: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class RequestSampleDeliveryMethod(TimestampMixin, ActiveFlagMixin, db.Model):
+    """A sample delivery method (روش تحویل نمونه) offered by the request form. Managed by an administrator."""
+
+    __tablename__ = "request_sample_delivery_methods"
+    __table_args__ = (UniqueConstraint("name", name="uq_rs_delivery_methods_name"),)
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class RequestSampleDispatch(TimestampMixin, db.Model):

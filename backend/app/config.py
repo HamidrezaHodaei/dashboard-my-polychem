@@ -84,6 +84,8 @@ class Config:
         "UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
     )
     MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "10"))
+    # Correspondence attachments: per-file limit (falls back to MAX_UPLOAD_MB when unset / 0).
+    MAIL_MAX_ATTACHMENT_MB = int(os.environ.get("MAIL_MAX_ATTACHMENT_MB", "0") or 0)
 
     # --- Misc ---
     JSON_SORT_KEYS = False

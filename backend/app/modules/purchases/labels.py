@@ -2,9 +2,11 @@
 STATUS = {
     "DRAFT": "پیش‌نویس", "ENTERING": "در حال ثبت اطلاعات", "AWAITING_INQUIRY": "در انتظار استعلام",
     "INQUIRING": "در حال استعلام", "AWAITING_SELECTION": "در انتظار انتخاب تأمین‌کننده",
-    "PURCHASING": "در حال انجام خرید", "AWAITING_DELIVERY": "در انتظار تحویل", "COMPLETED": "تکمیل‌شده",
+    "PURCHASING": "در حال انجام خرید", "SENT_TO_FINANCE": "ارسال به مالی",
+    "AWAITING_DELIVERY": "در حال تحویل و حمل", "COMPLETED": "پایان‌یافته",
     "CANCELLED": "لغوشده", "NEEDS_REVISION": "نیازمند اصلاح اطلاعات",
 }
+REVIEW = {"PENDING_REVIEW": "در انتظار بررسی", "APPROVED": "تأیید شده", "REJECTED": "رد شده", "NEEDS_REVISION": "نیازمند اصلاح"}
 PRIORITY = {"NORMAL": "عادی", "URGENT": "فوری", "EMERGENCY": "اضطراری"}
 DELIVERY = {"NOT_DELIVERED": "تحویل نشده", "PARTIAL": "تحویل جزئی", "DELIVERED": "تحویل کامل"}
 REFERENCE_SOURCE = {
@@ -19,4 +21,4 @@ STEP = {
     "basic": "اطلاعات اولیه", "items": "اقلام کالا", "budget": "بودجه و برآورد",
     "inquiries": "استعلام قیمت", "selection": "انتخاب تأمین‌کننده", "result": "نتیجه و تکمیل خرید",
 }
-EVENT_KIND = {"STEP": "ثبت مرحله", "STATUS": "تغییر وضعیت", "REFERENCE": "تأیید قیمت مبنا"}
+EVENT_KIND = {"STEP": "ثبت مرحله", "STATUS": "تغییر وضعیت", "REFERENCE": "تأیید قیمت مبنا", "REVIEW": "وضعیت بررسی"}

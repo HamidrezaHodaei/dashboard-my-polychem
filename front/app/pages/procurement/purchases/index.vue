@@ -8,6 +8,9 @@
       @action="navigateTo('/procurement/purchases/new')"
     >
       <template #actions>
+        <Button v-if="store.can('manage_catalog')" variant="outline" size="sm" class="gap-2" @click="navigateTo('/procurement/purchases/products')">
+          <Icon name="lucide:package-search" class="size-4" />مدیریت کالاها
+        </Button>
         <template v-if="store.can('export')">
           <Button variant="outline" size="sm" class="gap-2" :disabled="!!busy" @click="exportExcel('all')">
             <Icon :name="busy === 'xlsx' ? 'lucide:loader-circle' : 'lucide:file-spreadsheet'" class="size-4" :class="busy === 'xlsx' && 'animate-spin'" />
@@ -53,6 +56,12 @@
             <option v-for="s in store.meta?.statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
           </select>
         </PurchasesField>
+        <PurchasesField label="وضعیت بررسی">
+          <select v-model="store.filters.review_status" :class="selectCls" @change="refresh">
+            <option value="">همه</option>
+            <option v-for="s in store.meta?.review_statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
+          </select>
+        </PurchasesField>
         <PurchasesField label="نام تأمین‌کننده"><Input v-model="store.filters.supplier" placeholder="جستجو…" @input="debounced" /></PurchasesField>
         <PurchasesField label="شرکت یا واحد متقاضی">
           <Input v-model="store.filters.unit" list="purchase-units" placeholder="نام واحد…" @input="debounced" />
@@ -88,8 +97,8 @@
         <PurchasesBars :labels="labels" :series="[{ name: 'درخواست‌ها', color: '#6366f1', values: d.trend.map(t => t.requests) }]" :format="(n: number | null) => count(n)" />
       </PrintableChart>
       <PrintableChart title="روند هزینه‌های خرید" class="gap-3 p-5 shadow-none">
-        <h3 class="text-sm font-semibold">روند هزینه‌های خرید (خریدهای تکمیل‌شده)</h3>
-        <PurchasesLine :labels="labels" :series="[{ name: 'هزینه', color: '#0ea5e9', values: d.trend.map(t => t.spent) }]" />
+        <h3 class="text-sm font-semibold">روند هزینه‌های خرید (پایان‌یافته‌ها + خرید مستقیم، ریال)</h3>
+        <PurchasesLine :labels="labels" :series="[{ name: 'کل', color: '#0ea5e9', values: d.trend.map(t => (t.spent ?? 0) + (t.direct_spent ?? 0)) }, { name: 'درخواست‌ها', color: '#6366f1', values: d.trend.map(t => t.spent) }, { name: 'خرید مستقیم', color: '#f59e0b', values: d.trend.map(t => t.direct_spent) }]" />
       </PrintableChart>
       <PrintableChart title="توزیع خرید بر اساس گروه کالایی" class="gap-3 p-5 shadow-none">
         <h3 class="text-sm font-semibold">توزیع خرید بر اساس گروه کالایی</h3>
@@ -115,13 +124,13 @@
         <div v-else class="max-h-64 overflow-auto">
           <table class="w-full text-xs">
             <thead class="sticky top-0 bg-background text-muted-foreground"><tr>
-              <th class="p-1.5 text-right">تأمین‌کننده</th><th class="p-1.5">استعلام</th><th class="p-1.5">انتخاب‌شده</th><th class="p-1.5">کمترین قیمت</th><th class="p-1.5">میانگین تحویل (روز)</th><th class="p-1.5">مبلغ خرید</th>
+              <th class="p-1.5 text-right">تأمین‌کننده</th><th class="p-1.5">استعلام</th><th class="p-1.5">انتخاب‌شده</th><th class="p-1.5">کمترین قیمت</th><th class="p-1.5">میانگین تحویل (روز)</th><th class="p-1.5">مبلغ خرید</th><th class="p-1.5">خرید مستقیم</th>
             </tr></thead>
             <tbody>
               <tr v-for="s in d.suppliers" :key="s.supplier_id ?? s.name" class="border-t text-center">
                 <td class="p-1.5 text-right">{{ s.name }}</td><td>{{ count(s.inquiries) }}</td>
                 <td>{{ count(s.selected) }}<span v-if="s.win_rate !== null" class="text-muted-foreground"> ({{ count(s.win_rate) }}٪)</span></td>
-                <td>{{ s.compared ? `${count(s.cheapest)} از ${count(s.compared)}` : '—' }}</td><td>{{ count(s.avg_delivery_days) }}</td><td>{{ money(s.awarded) }}</td>
+                <td>{{ s.compared ? `${count(s.cheapest)} از ${count(s.compared)}` : '—' }}</td><td>{{ count(s.avg_delivery_days) }}</td><td>{{ money(s.awarded) }}</td><td>{{ s.direct_count ? `${count(s.direct_count)} — ${money(s.direct_amount)}` : '—' }}</td>
               </tr>
             </tbody>
           </table>
@@ -141,15 +150,15 @@
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-muted/50 text-muted-foreground"><tr>
-            <th class="p-3 text-right">گروه کالایی</th><th class="p-3">کل درخواست‌ها</th><th class="p-3">تکمیل‌شده</th><th class="p-3">باز</th><th class="p-3">مجموع هزینه</th><th class="p-3">صرفه‌جویی</th>
+            <th class="p-3 text-right">گروه کالایی</th><th class="p-3">کل درخواست‌ها</th><th class="p-3">پایان‌یافته</th><th class="p-3">باز</th><th class="p-3">خرید مستقیم</th><th class="p-3">مجموع هزینه (ریال)</th><th class="p-3">صرفه‌جویی (ریال)</th>
           </tr></thead>
           <tbody>
             <tr v-for="g in d.groups" :key="g.category_id ?? g.name" class="cursor-pointer border-t text-center hover:bg-muted/40" @click="openGroup(g)">
               <td class="p-3 text-right font-medium">{{ g.name }}<Badge v-if="g.inactive" variant="outline" class="mr-2">غیرفعال</Badge></td>
-              <td>{{ count(g.requests) }}</td><td>{{ count(g.completed) }}</td><td>{{ count(g.open) }}</td><td>{{ money(g.spent) }}</td>
-              <td :class="g.savings !== null && g.savings < 0 && 'text-destructive'">{{ g.savings === null ? '—' : money(g.savings) }}</td>
+              <td>{{ count(g.requests) }}</td><td>{{ count(g.completed) }}</td><td>{{ count(g.open) }}</td><td>{{ g.direct_count ? `${count(g.direct_count)} (${rialNumber(g.direct_spent)})` : '—' }}</td><td>{{ rialNumber(g.spent) }}</td>
+              <td :class="g.savings !== null && g.savings < 0 && 'text-destructive'">{{ g.savings === null ? '—' : rialNumber(g.savings) }}</td>
             </tr>
-            <tr v-if="!d.groups.length"><td colspan="6" class="p-6 text-center text-muted-foreground">گروه کالایی در سامانه تعریف نشده است.</td></tr>
+            <tr v-if="!d.groups.length"><td colspan="7" class="p-6 text-center text-muted-foreground">گروه کالایی در سامانه تعریف نشده است.</td></tr>
           </tbody>
         </table>
       </div>
@@ -172,8 +181,24 @@
       </div>
     </Card>
 
+    <!-- cartable: every registered request, with the expert's review status -->
+    <div v-if="d" class="flex flex-wrap items-center gap-2" dir="rtl">
+      <button type="button" class="rounded-lg border px-4 py-2 text-sm transition-colors" :class="view === 'requests' ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'" @click="view = 'requests'">درخواست‌های خرید</button>
+      <button type="button" class="rounded-lg border px-4 py-2 text-sm transition-colors" :class="view === 'direct' ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'" @click="view = 'direct'">
+        خریدهای مستقیم ({{ count(d.kpis.direct.value) }})
+      </button>
+    </div>
+    <div v-if="d && view === 'requests'" class="flex flex-wrap gap-2" dir="rtl">
+      <button
+        v-for="c in d.review_counts" :key="c.status" type="button" class="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors"
+        :class="store.filters.review_status === c.status ? 'border-primary ring-1 ring-primary' : 'hover:bg-muted'" @click="toggleReview(c.status)"
+      >
+        <span class="rounded-full px-2 py-0.5 text-xs" :class="reviewTone[c.status]">{{ c.label }}</span>{{ count(c.count) }}
+      </button>
+    </div>
+
     <!-- requests -->
-    <Card ref="listCard" class="overflow-hidden py-0 shadow-none">
+    <Card v-show="view === 'requests'" ref="listCard" class="overflow-hidden py-0 shadow-none">
       <div class="flex flex-wrap items-center justify-between gap-2 border-b p-4">
         <div>
           <h3 class="font-semibold">{{ store.kpi ? `جزئیات شاخص: ${kpiLabels[store.kpi]}` : 'فهرست درخواست‌های خرید' }}</h3>
@@ -205,6 +230,10 @@
               <td class="p-3">{{ r.requester_unit || '—' }}</td>
               <td class="whitespace-nowrap p-3">{{ r.request_date_jalali }}</td>
               <td class="p-3"><span class="whitespace-nowrap rounded-full px-2 py-0.5 text-xs" :class="statusTone[r.status]">{{ r.status_label }}</span></td>
+              <td class="p-3">
+                <button v-if="store.can('update')" type="button" class="whitespace-nowrap rounded-full px-2 py-0.5 text-xs underline-offset-2 hover:underline" :class="reviewTone[r.review_status]" :title="r.review_note || 'تعیین وضعیت بررسی'" @click.stop="openReview(r)">{{ r.review_label }}</button>
+                <span v-else class="whitespace-nowrap rounded-full px-2 py-0.5 text-xs" :class="reviewTone[r.review_status]" :title="r.review_note || ''">{{ r.review_label }}</span>
+              </td>
               <td v-if="store.kpi === 'next_month'" class="p-3">{{ money(r.forecast_amount) }}<div class="text-[11px] text-muted-foreground">{{ basisLabel[r.forecast_basis || ''] || 'بدون مبلغ' }}</div></td>
               <template v-else>
                 <td class="p-3">{{ r.supplier_name || '—' }}</td>
@@ -225,13 +254,61 @@
         </div>
       </div>
     </Card>
+
+    <!-- direct purchases -->
+    <Card v-if="view === 'direct'" class="overflow-hidden py-0 shadow-none">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b p-4">
+        <div>
+          <h3 class="font-semibold">خریدهای مستقیم</h3>
+          <p class="text-xs text-muted-foreground">خریدهایی که بدون درخواست و استعلام انجام شده‌اند؛ در هزینه‌ها، گروه‌ها و تأمین‌کنندگان داشبورد لحاظ می‌شوند. {{ d ? `مجموع (با فیلترهای فعلی): ${money(d.kpis.direct.amount)}` : '' }}</p>
+          <p v-if="store.filters.status || store.filters.review_status || store.filters.unit || store.filters.request_no" class="mt-1 text-xs text-amber-700">فیلتر وضعیت، وضعیت بررسی، واحد متقاضی یا شمارهٔ درخواست فقط برای درخواست‌هاست؛ خریدهای مستقیم با آن‌ها نمایش داده نمی‌شوند.</p>
+        </div>
+        <div class="flex gap-1.5">
+          <Button v-if="store.can('create')" size="sm" class="gap-2" @click="openDirect()"><Icon name="lucide:plus" class="size-4" />ثبت خرید مستقیم</Button>
+          <Button v-if="store.can('export')" variant="outline" size="sm" :disabled="!!busy" @click="exportExcel('direct')">Excel</Button>
+          <Button v-if="store.can('export')" variant="outline" size="sm" :disabled="!!busy" @click="printReport('direct')">PDF</Button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-muted/50 text-muted-foreground"><tr>
+            <th class="p-3 text-right">شمارهٔ خرید / سند</th><th class="p-3 text-right">تاریخ خرید</th><th class="p-3 text-right">شرح و نام کالا یا خدمت</th>
+            <th class="p-3 text-right">تأمین‌کننده</th><th class="p-3 text-right">مبلغ</th><th class="p-3 text-right">محل مصرف</th><th class="p-3" />
+          </tr></thead>
+          <tbody>
+            <tr v-for="x in store.directRows" :key="x.id" class="border-t">
+              <td class="p-3" dir="ltr"><span class="block text-right">{{ x.doc_no }}</span></td>
+              <td class="whitespace-nowrap p-3">{{ x.purchase_date_jalali }}</td>
+              <td class="p-3">{{ x.title }}<div v-if="x.category_name" class="text-xs text-muted-foreground">{{ x.category_name }}</div></td>
+              <td class="p-3">{{ x.supplier_name }}</td><td class="whitespace-nowrap p-3">{{ money(x.amount) }}</td><td class="p-3">{{ x.usage_place }}</td>
+              <td class="whitespace-nowrap p-3 text-left">
+                <Button v-if="store.can('update')" variant="ghost" size="sm" @click="openDirect(x)">ویرایش</Button>
+                <Button v-if="store.can('delete')" variant="ghost" size="sm" class="text-destructive" @click="removeDirect(x)">حذف</Button>
+              </td>
+            </tr>
+            <tr v-if="!store.directRows.length && !store.directLoading"><td colspan="7" class="p-8 text-center text-muted-foreground">خرید مستقیمی با این فیلترها ثبت نشده است.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between border-t p-3 text-sm">
+        <span class="text-muted-foreground">{{ count(store.directTotal) }} مورد</span>
+        <div class="flex items-center gap-2">
+          <Button variant="outline" size="sm" :disabled="store.directPage <= 1" @click="store.directPage--; store.loadDirect()">قبلی</Button>
+          <span>{{ count(store.directPage) }} / {{ count(Math.max(1, Math.ceil(store.directTotal / 15))) }}</span>
+          <Button variant="outline" size="sm" :disabled="store.directPage >= Math.ceil(store.directTotal / 15)" @click="store.directPage++; store.loadDirect()">بعدی</Button>
+        </div>
+      </div>
+    </Card>
+
+    <PurchasesReviewDialog v-model:open="reviewOpen" :request="reviewRow" @saved="onReviewSaved" />
+    <PurchasesDirectDialog v-model:open="directOpen" :edit="directEdit" @saved="refresh" />
   </ContainerWrapper>
 </template>
 
 <script setup lang="ts">
 import { ApiError, apiFetchPage } from '~/services/backendApi'
-import { count, money, statusTone } from '~/utils/purchase'
-import type { Dashboard, PurchaseRow } from '~/utils/purchase'
+import { count, money, reviewTone, rialNumber, statusTone } from '~/utils/purchase'
+import type { Dashboard, DirectPurchase, PurchaseRow } from '~/utils/purchase'
 
 definePageMeta({ title: 'گزارشات خرید' })
 
@@ -239,6 +316,8 @@ const store = usePurchasesStore()
 const notify = useNotify()
 const d = computed(() => store.dashboard)
 const busy = ref<'' | 'xlsx' | 'pdf'>('')
+const view = ref<'requests' | 'direct'>('requests')
+const confirm = useConfirm()
 const listCard = ref<{ $el: HTMLElement } | null>(null)
 const selectCls = 'h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
 const labels = computed(() => d.value?.trend.map(t => t.label) ?? [])
@@ -273,7 +352,8 @@ const reset = () => { preset.value = 'all'; return store.resetFilters() }
 
 /* ── KPI cards ── */
 const kpiLabels: Record<string, string> = {
-  total: 'تعداد کل درخواست‌های خرید', completed: 'خریدهای تکمیل‌شده', open: 'درخواست‌های باز و در حال انجام',
+  direct: 'خریدهای مستقیم',
+  total: 'تعداد کل درخواست‌های خرید', completed: 'خریدهای پایان‌یافته', open: 'درخواست‌های باز و در جریان بررسی',
   spent: 'مجموع هزینه‌های انجام‌شده', savings: 'صرفه‌جویی محقق‌شده', next_month: 'بودجه پیش‌بینی‌شده ماه آینده',
 }
 const basisLabel: Record<string, string> = { selected_quote: 'قیمت توافقی', estimate: 'برآورد اقلام', budget: 'بودجهٔ درخواست' }
@@ -283,8 +363,12 @@ const kpiCards = computed(() => {
   return [
     { key: 'total', label: kpiLabels.total, icon: 'lucide:files', value: count(k.total.value), note: k.total.cancelled ? `${count(k.total.cancelled)} مورد لغوشده` : 'بدون پیش‌نویس‌ها' },
     { key: 'completed', label: kpiLabels.completed, icon: 'lucide:circle-check', value: count(k.completed.value), note: 'خرید انجام و کالا کامل تحویل‌شده' },
-    { key: 'open', label: kpiLabels.open, icon: 'lucide:hourglass', value: count(k.open.value), note: 'در هر مرحله از گردش کار' },
-    { key: 'spent', label: kpiLabels.spent, icon: 'lucide:wallet', value: money(k.spent.value), note: k.spent.extra_costs_included ? 'شامل هزینه‌های جانبی' : 'فقط اقلام فیلترشده' },
+    { key: 'open', label: kpiLabels.open, icon: 'lucide:hourglass', value: count(k.open.value), note: 'بدون ردشده‌ها و لغوشده‌ها' },
+    {
+      key: 'spent', label: kpiLabels.spent, icon: 'lucide:wallet', value: money(k.spent.value),
+      note: `درخواست‌ها ${money(k.spent.requests_amount)} + خرید مستقیم ${money(k.spent.direct_amount)}${k.spent.extra_costs_included ? '' : ' (فقط اقلام فیلترشده)'}`,
+    },
+    { key: 'direct', label: 'خریدهای مستقیم (بدون درخواست)', icon: 'lucide:receipt', value: count(k.direct.value), note: `مبلغ: ${money(k.direct.amount)}` },
     {
       key: 'savings', label: kpiLabels.savings, icon: 'lucide:piggy-bank',
       value: k.savings.value === null ? 'محاسبه نشده' : money(k.savings.value), negative: (k.savings.value ?? 0) < 0,
@@ -296,7 +380,26 @@ const kpiCards = computed(() => {
     },
   ]
 })
+function toggleReview(status: string) {
+  store.filters.review_status = store.filters.review_status === status ? '' : status
+  refresh()
+}
+const reviewOpen = ref(false)
+const reviewRow = ref<PurchaseRow | null>(null)
+function openReview(r: PurchaseRow) { reviewRow.value = r; reviewOpen.value = true }
+const onReviewSaved = () => refresh()
+const directOpen = ref(false)
+const directEdit = ref<DirectPurchase | null>(null)
+function openDirect(x?: DirectPurchase) { directEdit.value = x ?? null; directOpen.value = true }
+async function removeDirect(x: DirectPurchase) {
+  if (!(await confirm.confirm({ title: `حذف خرید «${x.doc_no}»؟`, description: 'این مورد از گزارش‌ها و داشبورد کنار می‌رود.', confirmLabel: 'حذف', tone: 'danger' }))) return
+  try { await store.deleteDirect(x.id); notify.success('حذف شد'); await refresh() }
+  catch (e) { notify.error('حذف انجام نشد', e instanceof ApiError ? e.message : undefined) }
+}
+
 function showKpi(key: string) {
+  if (key === 'direct') { view.value = 'direct'; return }
+  view.value = 'requests'
   store.kpi = store.kpi === key ? '' : key
   store.page = 1
   store.loadList()
@@ -306,7 +409,7 @@ function showKpi(key: string) {
 const columns = computed(() => [
   { key: 'request_no', label: 'شماره', sort: true }, { key: 'subject', label: 'موضوع', sort: true },
   { key: 'requester_unit', label: 'واحد متقاضی', sort: true }, { key: 'request_date', label: 'تاریخ ثبت', sort: true },
-  { key: 'status', label: 'وضعیت', sort: true },
+  { key: 'status', label: 'وضعیت گردش کار', sort: true }, { key: 'review', label: 'وضعیت بررسی', sort: false },
   ...(store.kpi === 'next_month'
     ? [{ key: 'forecast', label: 'مبلغ پیش‌بینی', sort: false }]
     : [{ key: 'supplier', label: 'تأمین‌کنندهٔ منتخب', sort: false }, { key: 'final_amount', label: 'مبلغ', sort: true }, { key: 'savings', label: 'صرفه‌جویی', sort: false }]),
@@ -355,7 +458,7 @@ async function printReport(kind: string) {
     const r = await store.exportRows(kind)
     const w = window.open('', '_blank')
     if (!w) { notify.warning('مرورگر پنجره چاپ را مسدود کرد'); return }
-    const body = r.rows.map(row => `<tr>${row.map(c => `<td>${esc(typeof c === 'number' ? count(c) : c)}</td>`).join('')}</tr>`).join('')
+    const body = r.rows.map(row => `<tr>${row.map(c => `<td>${esc(typeof c === 'number' ? c.toLocaleString('en-US') : c)}</td>`).join('')}</tr>`).join('')
     w.document.write(`<html dir="rtl" lang="fa"><head><meta charset="utf-8"><title>${esc(r.title)}</title>
       <style>body{font-family:Tahoma,sans-serif;font-size:11px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:4px 6px;text-align:right}th{background:#f3f4f6}</style></head>
       <body><h3>${esc(r.title)}</h3><table><thead><tr>${r.headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></body></html>`)

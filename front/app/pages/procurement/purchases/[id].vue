@@ -9,12 +9,14 @@
         <h1 class="text-2xl font-semibold tracking-tight">{{ req?.subject || 'ثبت خرید جدید' }}</h1>
         <div v-if="req" class="mt-2 flex flex-wrap items-center gap-2 text-sm">
           <span class="rounded-full px-2.5 py-0.5 text-xs" :class="statusTone[req.status]">{{ req.status_label }}</span>
+          <span class="rounded-full px-2.5 py-0.5 text-xs" :class="reviewTone[req.review_status]">بررسی: {{ req.review_label }}</span>
           <span class="text-muted-foreground">اولویت: {{ req.priority_label }}</span>
           <span v-if="saving" class="text-xs text-muted-foreground">در حال ذخیره…</span>
           <span v-else-if="savedAt" class="text-xs text-muted-foreground">آخرین ذخیره: {{ savedAt }}</span>
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
+        <Button v-if="req?.my_actions.can_review" variant="outline" size="sm" class="gap-2" @click="reviewOpen = true"><Icon name="lucide:clipboard-check" class="size-4" />تعیین وضعیت بررسی</Button>
         <Button variant="outline" size="sm" class="gap-2" @click="showSummary = true"><Icon name="lucide:clipboard-list" class="size-4" />خلاصه اطلاعات</Button>
         <Button v-if="req?.my_actions.can_send_back" variant="outline" size="sm" @click="askNote('send-back')">ارسال برای اصلاح</Button>
         <Button v-if="req?.my_actions.can_cancel" variant="outline" size="sm" class="text-destructive" @click="askNote('cancel')">لغو خرید</Button>
@@ -26,15 +28,22 @@
     <p v-if="req?.status_note && (req.status === 'NEEDS_REVISION' || req.status === 'CANCELLED')" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
       <b>{{ req.status === 'CANCELLED' ? 'علت لغو:' : 'موارد اصلاحی:' }}</b> {{ req.status_note }}
     </p>
+    <p v-if="req?.review_note && ['REJECTED', 'NEEDS_REVISION'].includes(req.review_status)" class="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
+      <b>{{ req.review_label }}:</b> {{ req.review_note }}<span v-if="req.reviewed_by_name" class="text-xs"> — {{ req.reviewed_by_name }}</span>
+    </p>
     <p v-if="readonly && req" class="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-      این درخواست {{ closed ? 'بسته شده' : 'برای شما فقط‌خواندنی' }} است؛ {{ closed && req.my_actions.can_reopen ? 'برای ویرایش، آن را «ارسال برای اصلاح» کنید.' : '' }}
+      <template v-if="req.review_status === 'REJECTED'">این درخواست «رد شده» است و در سوابق می‌ماند؛ برای ادامهٔ کار، وضعیت بررسی را تغییر دهید.</template>
+      <template v-else>این درخواست {{ closed ? 'بسته شده' : 'برای شما فقط‌خواندنی' }} است؛ {{ closed && req.my_actions.can_reopen ? 'برای ویرایش، آن را «ارسال برای اصلاح» کنید.' : '' }}</template>
     </p>
     <div v-if="req?.my_actions.can_reopen" class="print-hide" />
 
-    <!-- progress -->
-    <div class="space-y-3">
-      <Progress :model-value="((step + 1) / 6) * 100" class="h-1.5" />
-      <ol class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+    <!-- life-cycle stepper (right to left) + the six data-entry steps -->
+    <div class="space-y-4">
+      <PurchasesStepper :stages="LIFECYCLE" :current="lifecycleStage" :finished="req?.pipeline_status === 'COMPLETED'" />
+      <div dir="rtl" class="h-1 overflow-hidden rounded-full bg-muted">
+        <div class="ml-auto h-full rounded-full bg-primary transition-[width] duration-300" :style="{ width: `${((step + 1) / 6) * 100}%` }" />
+      </div>
+      <ol dir="rtl" class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <li v-for="(s, i) in WIZARD_STEPS" :key="s.key">
           <button
             type="button" class="flex w-full items-center gap-2 rounded-lg border p-2.5 text-right text-sm transition-colors hover:bg-muted"
@@ -56,7 +65,9 @@
         <fieldset :disabled="readonly" class="min-w-0 space-y-5">
           <!-- 1: basic -->
           <section v-show="step === 0" class="grid gap-4 sm:grid-cols-2">
-            <PurchasesField label="شماره درخواست خرید" hint="به‌صورت خودکار و یکتا تولید می‌شود"><Input :model-value="req?.request_no || 'پس از ثبت تولید می‌شود'" disabled dir="ltr" class="text-right" /></PurchasesField>
+            <PurchasesField label="شماره درخواست خرید" required :error="e('request_no')" hint="توسط کارشناس وارد می‌شود (شمارهٔ فرم کاغذی یا دبیرخانه)؛ یکتا و بعداً قابل ویرایش است">
+              <Input v-model="basic.request_no" dir="ltr" class="text-right" autocomplete="off" />
+            </PurchasesField>
             <PurchasesField label="تاریخ ثبت" required :error="e('request_date')"><JalaliDateInput v-model="basic.request_date" /></PurchasesField>
             <PurchasesField label="شرکت یا واحد متقاضی" required :error="e('requester_unit')">
               <Input v-model="basic.requester_unit" list="req-units" />
@@ -82,16 +93,19 @@
                 <PurchasesField label="گروه کالایی" required :error="e(`items.${i}.category_id`)">
                   <select v-model="it.category_id" :class="selectCls"><option :value="null" disabled>انتخاب…</option><option v-for="c in store.meta?.categories" :key="c.id" :value="c.id">{{ c.name }}</option></select>
                 </PurchasesField>
-                <PurchasesField label="نام کالا" required :error="e(`items.${i}.name`)"><Input v-model="it.name" /></PurchasesField>
+                <PurchasesField label="نام کالا (از فهرست کالاها)" required :error="e(`items.${i}.product_id`) || e(`items.${i}.name`)">
+                  <PurchasesProductPicker :name="it.name" :category-id="it.category_id" @pick="p => pickProduct(it, p)" />
+                </PurchasesField>
+                <PurchasesField label="کد کالا" hint="توسط مدیر سامانه در تعریف کالا ثبت می‌شود"><Input :model-value="it.product_code || '—'" dir="ltr" class="text-right" disabled /></PurchasesField>
                 <PurchasesField label="برند یا مدل"><Input v-model="it.brand_model" /></PurchasesField>
                 <div class="grid grid-cols-2 gap-3">
                   <PurchasesField label="تعداد" required :error="e(`items.${i}.quantity`)"><PurchasesMoney v-model="it.quantity" :decimals="3" /></PurchasesField>
                   <PurchasesField label="واحد" required :error="e(`items.${i}.unit`)">
-                    <Input v-model="it.unit" list="units" /><datalist id="units"><option v-for="u in store.meta?.units" :key="u" :value="u" /></datalist>
+                    <PurchasesUnit v-model="it.unit" />
                   </PurchasesField>
                 </div>
                 <PurchasesField label="مشخصات و شرح فنی" class="sm:col-span-2"><Textarea v-model="it.specs" rows="2" /></PurchasesField>
-                <PurchasesField label="قیمت تخمینی واحد"><PurchasesMoney v-model="it.estimated_unit_price" /></PurchasesField>
+                <PurchasesField label="قیمت تخمینی واحد (ریال)"><PurchasesMoney rial v-model="it.estimated_unit_price" /></PurchasesField>
                 <PurchasesField label="مبلغ برآوردی قلم"><Input :model-value="it.quantity && it.estimated_unit_price ? money(it.quantity * it.estimated_unit_price) : '—'" disabled /></PurchasesField>
               </div>
               <details class="rounded-lg bg-muted/30 p-3 text-sm">
@@ -104,7 +118,7 @@
                   <PurchasesField label="منبع قیمت مبنا" :error="e(`items.${i}.reference_source`)">
                     <select v-model="it.reference_source" :class="selectCls"><option :value="null">بدون قیمت مبنا</option><option v-for="s in referenceSources" :key="s.value" :value="s.value">{{ s.label }}</option></select>
                   </PurchasesField>
-                  <PurchasesField label="قیمت مبنای واحد" :error="e(`items.${i}.reference_unit_price`)"><PurchasesMoney v-model="it.reference_unit_price" /></PurchasesField>
+                  <PurchasesField label="قیمت مبنای واحد (ریال)" :error="e(`items.${i}.reference_unit_price`)"><PurchasesMoney rial v-model="it.reference_unit_price" /></PurchasesField>
                   <PurchasesField label="مستند / شرح منبع" class="sm:col-span-2" :error="e(`items.${i}.reference_note`)"><Input v-model="it.reference_note" placeholder="مثلاً شمارهٔ قرارداد یا لیست قیمت" /></PurchasesField>
                 </div>
                 <Button v-if="it.id && it.reference_unit_price && !it.reference_approved && req?.my_actions.can_approve" size="sm" variant="outline" class="mt-3" @click="approveRef(it.id)">تأیید قیمت مبنا</Button>
@@ -116,8 +130,8 @@
 
           <!-- 3: budget -->
           <section v-show="step === 2" class="grid gap-4 sm:grid-cols-2">
-            <PurchasesField label="بودجه پیش‌بینی‌شده" :error="e('budget_amount')"><PurchasesMoney v-model="budget.budget_amount" /></PurchasesField>
-            <PurchasesField label="مبلغ کل برآوردی" hint="جمع (تعداد × قیمت تخمینی) اقلام؛ وقتی همهٔ اقلام قیمت تخمینی داشته باشند"><Input :model-value="estimatedTotal === null ? '—' : money(estimatedTotal)" disabled /></PurchasesField>
+            <PurchasesField label="بودجه پیش‌بینی‌شده (ریال)" :error="e('budget_amount')"><PurchasesMoney rial v-model="budget.budget_amount" /></PurchasesField>
+            <PurchasesField label="مبلغ کل برآوردی (ریال)" hint="جمع (تعداد × قیمت تخمینی) اقلام؛ وقتی همهٔ اقلام قیمت تخمینی داشته باشند"><Input :model-value="estimatedTotal === null ? '—' : money(estimatedTotal)" disabled /></PurchasesField>
             <PurchasesField label="تاریخ موردنیاز" required :error="e('required_date')"><JalaliDateInput v-model="budget.required_date" /></PurchasesField>
             <PurchasesField label="محل تحویل" required :error="e('delivery_location')"><Input v-model="budget.delivery_location" /></PurchasesField>
             <PurchasesField label="مستندات و فایل‌های مرتبط" class="sm:col-span-2" :error="e('files')">
@@ -142,15 +156,15 @@
                 <PurchasesField label="مدت اعتبار پیشنهاد (روز)" :error="e(`inquiries.${i}.validity_days`)"><PurchasesMoney v-model="q.validity_days" :decimals="0" /></PurchasesField>
                 <PurchasesField label="زمان تحویل (روز)" :error="e(`inquiries.${i}.delivery_days`)"><PurchasesMoney v-model="q.delivery_days" :decimals="0" /></PurchasesField>
                 <PurchasesField label="شرایط پرداخت" :error="e(`inquiries.${i}.payment_terms`)"><Input v-model="q.payment_terms" /></PurchasesField>
-                <PurchasesField label="هزینه‌های جانبی"><PurchasesMoney v-model="q.extra_costs" /></PurchasesField>
+                <PurchasesField label="هزینه‌های جانبی (ریال)"><PurchasesMoney rial v-model="q.extra_costs" /></PurchasesField>
               </div>
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
-                  <thead class="text-muted-foreground"><tr><th class="p-2 text-right">کالا</th><th class="p-2">تعداد</th><th class="p-2">قیمت پیشنهادی واحد</th><th class="p-2">جمع</th></tr></thead>
+                  <thead class="text-muted-foreground"><tr><th class="p-2 text-right">کالا</th><th class="p-2">تعداد</th><th class="p-2">قیمت پیشنهادی واحد (ریال)</th><th class="p-2">جمع</th></tr></thead>
                   <tbody>
                     <tr v-for="it in savedItems" :key="it.id" class="border-t">
                       <td class="p-2">{{ it.name }}</td><td class="p-2 text-center">{{ count(it.quantity) }} {{ it.unit }}</td>
-                      <td class="p-2"><PurchasesMoney v-model="q.prices[it.id!]" /></td>
+                      <td class="p-2"><PurchasesMoney rial v-model="q.prices[it.id!]" /></td>
                       <td class="p-2 text-center">{{ q.prices[it.id!] ? money((q.prices[it.id!] as number) * (it.quantity || 0)) : '—' }}</td>
                     </tr>
                   </tbody>
@@ -201,13 +215,18 @@
               <p v-if="notLowest" class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">تأمین‌کنندهٔ انتخابی کمترین قیمت را نداده است؛ ثبت توضیح الزامی است.</p>
               <PurchasesField label="توضیح انتخاب تأمین‌کننده" :required="notLowest" :error="e('note')"><Textarea v-model="sel.note" rows="3" /></PurchasesField>
               <div v-if="selectedQuote" class="space-y-2">
-                <Label class="font-semibold">قیمت نهایی توافق‌شده (واحد)</Label>
+                <Label class="font-semibold">قیمت نهایی توافق‌شده (واحد، ریال)</Label>
                 <div v-for="it in req.items" :key="it.id" class="grid items-center gap-2 sm:grid-cols-[1fr_220px]">
                   <span class="text-sm">{{ it.name }} <span class="text-xs text-muted-foreground">— پیشنهاد: {{ money(selectedQuote.lines.find(l => l.item_id === it.id)?.unit_price) }}</span></span>
-                  <PurchasesMoney v-model="sel.agreed[it.id]" />
+                  <PurchasesMoney rial v-model="sel.agreed[it.id]" />
                 </div>
                 <p class="text-sm font-medium">جمع توافقی اقلام: {{ money(agreedTotal) }}</p>
               </div>
+              <div v-if="req?.status === 'PURCHASING' && req.my_actions.can_send_to_finance" class="flex flex-wrap items-center gap-3 rounded-lg border border-cyan-300 bg-cyan-50 p-3 text-sm text-cyan-900">
+                <span>تأمین‌کننده و قیمت‌ها ثبت شده است. برای ادامه، درخواست را به مالی ارسال کنید.</span>
+                <Button size="sm" :disabled="saving" @click="sendToFinance">ارسال به مالی</Button>
+              </div>
+              <p v-else-if="req?.sent_to_finance_at" class="rounded-lg bg-cyan-50 p-3 text-sm text-cyan-900">این درخواست در تاریخ {{ req.sent_to_finance_at }} به مالی ارسال شده است.</p>
             </template>
           </section>
 
@@ -215,6 +234,7 @@
           <section v-show="step === 5" class="space-y-4">
             <p v-if="!req?.selected_inquiry_id" class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">ابتدا تأمین‌کنندهٔ برنده را انتخاب کنید.</p>
             <template v-else>
+              <p v-if="!req.sent_to_finance_at" class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">برای ثبت نهایی خرید، ابتدا درخواست باید «ارسال به مالی» شود (در مرحلهٔ انتخاب تأمین‌کننده). تا آن زمان فقط پیش‌نویس ذخیره می‌شود.</p>
               <div class="grid gap-4 sm:grid-cols-2">
                 <PurchasesField label="تاریخ انجام خرید" required :error="e('purchase_date')"><JalaliDateInput v-model="result.purchase_date" /></PurchasesField>
                 <PurchasesField label="وضعیت تحویل کالا" required :error="e('delivery_status')">
@@ -223,12 +243,12 @@
               </div>
               <div class="overflow-x-auto">
                 <table class="w-full text-sm">
-                  <thead class="text-muted-foreground"><tr><th class="p-2 text-right">کالا</th><th class="p-2">مقدار خریداری‌شده</th><th class="p-2">قیمت نهایی واحد</th><th class="p-2">جمع</th><th class="p-2">صرفه‌جویی</th></tr></thead>
+                  <thead class="text-muted-foreground"><tr><th class="p-2 text-right">کالا</th><th class="p-2">مقدار خریداری‌شده</th><th class="p-2">قیمت نهایی واحد (ریال)</th><th class="p-2">جمع</th><th class="p-2">صرفه‌جویی</th></tr></thead>
                   <tbody>
                     <tr v-for="it in req.items" :key="it.id" class="border-t">
                       <td class="p-2">{{ it.name }}<div class="text-xs text-muted-foreground">سفارش: {{ count(it.quantity) }} {{ it.unit }}</div></td>
                       <td class="p-2"><PurchasesMoney v-model="result.qty[it.id]" :decimals="3" /></td>
-                      <td class="p-2"><PurchasesMoney v-model="result.price[it.id]" /></td>
+                      <td class="p-2"><PurchasesMoney rial v-model="result.price[it.id]" /></td>
                       <td class="p-2 text-center">{{ money((result.qty[it.id] || 0) * (result.price[it.id] || 0)) }}</td>
                       <td class="p-2 text-center" :class="(saving_of(it) ?? 0) < 0 && 'text-destructive'">{{ saving_of(it) === null ? 'بدون قیمت مبنای تأییدشده' : money(saving_of(it)) }}</td>
                     </tr>
@@ -237,8 +257,8 @@
               </div>
               <p v-if="e('lines')" class="text-xs text-destructive">{{ e('lines') }}</p>
               <div class="grid gap-4 sm:grid-cols-2">
-                <PurchasesField label="هزینه‌های جانبی"><PurchasesMoney v-model="result.extra" /></PurchasesField>
-                <PurchasesField label="مبلغ نهایی خرید" hint="به‌صورت خودکار از اقلام و هزینه‌های جانبی محاسبه می‌شود"><Input :model-value="money(finalAmount)" disabled /></PurchasesField>
+                <PurchasesField label="هزینه‌های جانبی (ریال)"><PurchasesMoney rial v-model="result.extra" /></PurchasesField>
+                <PurchasesField label="مبلغ نهایی خرید (ریال)" hint="به‌صورت خودکار از اقلام و هزینه‌های جانبی محاسبه می‌شود"><Input :model-value="money(finalAmount)" disabled /></PurchasesField>
                 <PurchasesField label="توضیحات نهایی" class="sm:col-span-2"><Textarea v-model="result.note" rows="3" /></PurchasesField>
                 <PurchasesField label="مستندات نهایی" class="sm:col-span-2"><PurchasesFiles v-model="result.files" :upload="store.upload" :download="store.downloadFile" /></PurchasesField>
               </div>
@@ -287,6 +307,8 @@
       </DialogContent>
     </Dialog>
 
+    <PurchasesReviewDialog v-model:open="reviewOpen" :request="req" @saved="hydrate" />
+
     <!-- reason prompt (cancel / send back) -->
     <Dialog v-model:open="noteOpen">
       <DialogContent dir="rtl">
@@ -300,8 +322,8 @@
 
 <script setup lang="ts">
 import { ApiError } from '~/services/backendApi'
-import { WIZARD_STEPS, count, fieldErrors, money, statusTone } from '~/utils/purchase'
-import type { PFile, PurchaseInquiry, PurchaseItem, PurchaseRequest, StepKey } from '~/utils/purchase'
+import { LIFECYCLE, WIZARD_STEPS, count, fieldErrors, money, reviewTone, stageOf, statusTone } from '~/utils/purchase'
+import type { CatalogProduct, PFile, PurchaseInquiry, PurchaseItem, PurchaseRequest, StepKey } from '~/utils/purchase'
 
 definePageMeta({ title: 'ثبت و مدیریت خرید' })
 
@@ -321,6 +343,7 @@ const stepError = ref('')
 const errs = ref<Record<string, string>>({})
 const e = (k: string) => errs.value[k]
 const showSummary = ref(false)
+const reviewOpen = ref(false)
 const referenceSources = computed(() => (store.meta?.reference_sources ?? []).filter(s => s.value !== 'LAST_PURCHASE'))
 
 const closed = computed(() => !!req.value && ['COMPLETED', 'CANCELLED'].includes(req.value.status))
@@ -329,12 +352,27 @@ const savedItems = computed(() => req.value?.items ?? [])
 const structureLocked = computed(() => !!req.value?.inquiries.length)
 
 /* ── per-step form state ── */
-const basic = reactive({ request_date: '', requester_unit: '', requester_name: '', subject: '', priority: 'NORMAL', reason: '', description: '' })
+const basic = reactive({ request_no: '', request_date: '', requester_unit: '', requester_name: '', subject: '', priority: 'NORMAL', reason: '', description: '' })
 type FormItem = PurchaseItem & { key: number }
 let keySeq = 1
-const blankItem = (): FormItem => ({ key: keySeq++, category_id: null, name: '', specs: null, brand_model: null, quantity: null, unit: '', estimated_unit_price: null, reference_unit_price: null, reference_source: null, reference_note: null, reference_item_id: null })
+const blankItem = (): FormItem => ({ key: keySeq++, product_id: null, product_code: null, category_id: null, name: '', specs: null, brand_model: null, quantity: null, unit: '', estimated_unit_price: null, reference_unit_price: null, reference_source: null, reference_note: null, reference_item_id: null })
 const items = ref<FormItem[]>([blankItem()])
 const addItem = () => items.value.push(blankItem())
+function pickProduct(it: FormItem, p: CatalogProduct | null) {
+  if (!p) return
+  it.product_id = p.id
+  it.name = p.name
+  it.product_code = p.code
+  if (p.category_id && !it.category_id) it.category_id = p.category_id // the product's group is only a default
+}
+const lifecycleStage = computed(() => (req.value ? stageOf(req.value.status === 'NEEDS_REVISION' || req.value.status === 'CANCELLED' ? req.value.pipeline_status : req.value.status) : 0))
+async function sendToFinance() {
+  if (!req.value) return
+  saving.value = true
+  try { hydrate(await store.action(req.value.id, 'send-to-finance')); notify.success('درخواست به مالی ارسال شد'); go(5) }
+  catch (err) { stepError.value = err instanceof ApiError ? err.message : 'ارسال انجام نشد.' }
+  finally { saving.value = false }
+}
 const budget = reactive<{ budget_amount: number | null, required_date: string, delivery_location: string, files: PFile[] }>({ budget_amount: null, required_date: '', delivery_location: '', files: [] })
 interface FormInquiry { key: number, supplier_id: number | null, supplier_name: string, received_date: string, validity_days: number | null, delivery_days: number | null, payment_terms: string, extra_costs: number | null, note: string, files: PFile[], prices: Record<number, number | null>, options: { id: number, name: string, category: string | null }[] }
 const inquiries = ref<FormInquiry[]>([])
@@ -350,7 +388,7 @@ const estimatedTotal = computed(() => {
 /** Fill every form from the server copy. */
 function hydrate(r: PurchaseRequest) {
   req.value = r
-  Object.assign(basic, { request_date: r.request_date || '', requester_unit: r.requester_unit || '', requester_name: r.requester_name || '', subject: r.subject || '', priority: r.priority, reason: r.reason || '', description: r.description || '' })
+  Object.assign(basic, { request_no: r.request_no, request_date: r.request_date || '', requester_unit: r.requester_unit || '', requester_name: r.requester_name || '', subject: r.subject || '', priority: r.priority, reason: r.reason || '', description: r.description || '' })
   items.value = r.items.length ? r.items.map(i => ({ ...i, key: keySeq++ })) : [blankItem()]
   Object.assign(budget, { budget_amount: r.budget_amount, required_date: r.required_date || '', delivery_location: r.delivery_location || '', files: r.budget_files })
   inquiries.value = r.inquiries.map((q: PurchaseInquiry) => ({
@@ -398,7 +436,7 @@ function body(key: StepKey, complete: boolean): Record<string, unknown> {
     return {
       complete,
       items: items.value.map(i => ({
-        id: i.id ?? null, category_id: i.category_id, name: i.name, specs: i.specs, brand_model: i.brand_model, quantity: i.quantity, unit: i.unit,
+        id: i.id ?? null, product_id: i.product_id, category_id: i.category_id, name: i.name, specs: i.specs, brand_model: i.brand_model, quantity: i.quantity, unit: i.unit,
         estimated_unit_price: i.estimated_unit_price, reference_unit_price: i.reference_unit_price, reference_source: i.reference_source,
         reference_note: i.reference_note, reference_item_id: i.reference_item_id,
       })),
@@ -538,7 +576,7 @@ const summaryRows = computed<[string, string | number | null][]>(() => {
   const r = req.value
   if (!r) return []
   return [
-    ['شماره درخواست', r.request_no], ['وضعیت', r.status_label], ['واحد متقاضی', r.requester_unit], ['درخواست‌کننده', r.requester_name],
+    ['شماره درخواست', r.request_no], ['وضعیت', r.status_label], ['وضعیت بررسی', r.review_label], ['واحد متقاضی', r.requester_unit], ['درخواست‌کننده', r.requester_name],
     ['تاریخ ثبت', r.request_date_jalali], ['موضوع', r.subject], ['اولویت', r.priority_label], ['علت و ضرورت', r.reason],
     ['بودجه پیش‌بینی‌شده', r.budget_amount === null ? null : money(r.budget_amount)], ['مبلغ برآوردی', r.estimated_total === null ? null : money(r.estimated_total)],
     ['تاریخ موردنیاز', r.required_date_jalali], ['محل تحویل', r.delivery_location],
@@ -553,7 +591,7 @@ function firstOpenStep(r: PurchaseRequest) {
   if (['COMPLETED', 'CANCELLED'].includes(r.status)) return 5
   if (r.status === 'DRAFT' || r.status === 'ENTERING') return r.items.length ? 2 : 1
   if (r.status === 'AWAITING_INQUIRY' || r.status === 'INQUIRING') return 3
-  if (r.status === 'AWAITING_SELECTION') return 4
+  if (r.status === 'AWAITING_SELECTION' || r.status === 'PURCHASING') return 4
   return 5
 }
 

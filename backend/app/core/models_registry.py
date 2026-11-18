@@ -40,8 +40,8 @@ from app.modules.suppliers.models import Supplier, SupplierCategory, SupplierFil
 from app.modules.customers.models import Customer, CustomerCategory, CustomerOptionItem  # noqa: F401
 from app.modules.crm.models import CrmPaymentMethod, CrmSale  # noqa: F401
 from app.modules.request_samples.models import (  # noqa: F401
-    RequestSample, RequestSampleDispatch, RequestSampleEvent, RequestSampleFile, RequestSampleFollowUp,
-    RequestSampleItem,
+    RequestSample, RequestSampleDeliveryMethod, RequestSampleDispatch, RequestSampleEvent, RequestSampleFile,
+    RequestSampleFollowUp, RequestSampleItem,
 )
 from app.modules.logistics.models import (  # noqa: F401
     LogisticsApplicant,
@@ -51,6 +51,7 @@ from app.modules.logistics.models import (  # noqa: F401
     LogisticsServiceArea,
 )
 from app.modules.notifications.models import Notification  # noqa: F401
+from app.modules.mail.models import MailAttachment, MailMessage, MailParticipant, MailUnitAccess  # noqa: F401
 
 __all__ = [
     "Organization",
@@ -77,10 +78,12 @@ __all__ = [
     "SupplierCategory",
 ]
 from app.modules.purchases.models import (  # noqa: F401,E402
+    PurchaseDirect,
     PurchaseEvent,
     PurchaseFile,
     PurchaseInquiry,
     PurchaseInquiryItem,
     PurchaseItem,
+    PurchaseProduct,
     PurchaseRequest,
 )

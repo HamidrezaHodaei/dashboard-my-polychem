@@ -28,7 +28,7 @@ from app.core.users.models import User
 from app.extensions import db
 from app.modules.purchases.models import (
     DeliveryStatus, PurchaseEvent, PurchaseFile, PurchaseInquiry, PurchaseInquiryItem, PurchaseItem,
-    PurchasePriority, PurchaseRequest, PurchaseStatus, ReferenceSource,
+    PurchasePriority, PurchaseProduct, PurchaseRequest, PurchaseStatus, ReferenceSource, ReviewStatus,
 )
 from app.modules.purchases.schemas import (
     ApproveReferenceIn, BasicIn, BudgetIn, InquiriesIn, ItemsIn, ResultIn, SelectionIn,
@@ -37,7 +37,9 @@ from app.modules.suppliers.models import Supplier, SupplierCategory, SupplierSta
 from app.permissions.exceptions import PermissionDeniedError
 from app.permissions.service import has_permission
 from app.utils.exceptions import ConflictError, InvalidInputError, NotFoundError
-from app.utils.jalali import parse_date_input, tehran_today, to_jalali
+import re
+
+from app.utils.jalali import parse_date_input, tehran_today
 
 MODULE = "procurement"
 ENTITY = "purchase_request"
@@ -66,12 +68,15 @@ def can(actor: User, action: str) -> bool:
 def viewer_flags(actor: User, req: PurchaseRequest) -> dict:
     open_ = req.status not in CLOSED
     return {
-        "can_edit": can(actor, "update") and open_,
+        "can_edit": can(actor, "update") and open_ and req.review_status != ReviewStatus.REJECTED,
         "can_cancel": can(actor, "update") and open_,
         "can_delete": can(actor, "delete") and req.status in (PurchaseStatus.DRAFT, PurchaseStatus.CANCELLED),
         "can_approve": can(actor, "approve"),
         "can_send_back": can(actor, "approve") and req.status != PurchaseStatus.DRAFT,
         "can_reopen": can(actor, "approve") and not open_,
+        "can_send_to_finance": can(actor, "update") and req.status == PurchaseStatus.PURCHASING,
+        "can_manage_catalog": can(actor, "manage_catalog"),
+        "can_review": can(actor, "update"),
         "can_export": can(actor, "export"),
     }
 
@@ -162,6 +167,8 @@ def _editable(actor: User, request_id: int) -> PurchaseRequest:
     req = _load(request_id)
     if req.status in CLOSED:
         raise ConflictError("این درخواست بسته شده است؛ برای ویرایش، مدیر باید آن را برای اصلاح بازگرداند.")
+    if req.review_status == ReviewStatus.REJECTED:
+        raise ConflictError("این درخواست «رد شده» است و در سوابق می‌ماند؛ برای ادامهٔ کار، ابتدا وضعیت بررسی آن را تغییر دهید.")
     return req
 
 
@@ -227,16 +234,24 @@ def _attach_files(actor: User, req: PurchaseRequest, refs) -> list[dict]:
     return _file_refs(found[i] for i in ids)
 
 
-# ── request number ───────────────────────────────────────────────────
-def _next_request_no() -> str:
-    jy = to_jalali(tehran_today())[0]
-    prefix = f"PR-{jy}-"
-    last = db.session.scalar(
-        select(PurchaseRequest.request_no).where(PurchaseRequest.request_no.like(f"{prefix}%"))
-        .order_by(PurchaseRequest.request_no.desc()).limit(1)
-    )
-    seq = int(last.rsplit("-", 1)[1]) + 1 if last else 1
-    return f"{prefix}{seq:05d}"
+# ── request number (typed by the expert -- the system never numbers requests) ──
+REQUEST_NO_RE = re.compile(r"^[\w\-./\\+#()\[\] ]+$", re.UNICODE)
+
+
+def _clean_request_no(value: str | None) -> str:
+    no = " ".join((value or "").split())
+    _need(no, "شماره درخواست را وارد کنید.", "request_no")
+    _need(len(no) <= 30, "شماره درخواست حداکثر ۳۰ نویسه است.", "request_no")
+    _need(REQUEST_NO_RE.match(no), "شماره درخواست فقط می‌تواند شامل حروف، عدد و - _ . / \\ + # ( ) [ ] باشد.", "request_no")
+    return no
+
+
+def _check_request_no_free(no: str, exclude_id: int | None) -> None:
+    q = select(PurchaseRequest.id).where(func.lower(PurchaseRequest.request_no) == no.lower())  # soft-deleted rows count too
+    if exclude_id is not None:
+        q = q.where(PurchaseRequest.id != exclude_id)
+    if db.session.scalar(q) is not None:
+        raise InvalidInputError("این شماره درخواست قبلاً ثبت شده است.", "request_no")
 
 
 # ── meta ─────────────────────────────────────────────────────────────
@@ -262,12 +277,14 @@ def meta(actor: User) -> dict:
         "requester_units": sorted(u for u in requester_units if u),
         "statuses": [{"value": k, "label": v} for k, v in L.STATUS.items()],
         "priorities": [{"value": k, "label": v} for k, v in L.PRIORITY.items()],
+        "review_statuses": [{"value": k, "label": v} for k, v in L.REVIEW.items()],
         "delivery_statuses": [{"value": k, "label": v} for k, v in L.DELIVERY.items()],
         "reference_sources": [{"value": k, "label": v} for k, v in L.REFERENCE_SOURCE.items()],
         "selection_reasons": [{"value": k, "label": v} for k, v in L.SELECTION_REASON.items()],
         "steps": [{"value": k, "label": v} for k, v in L.STEP.items()],
         "max_inquiries": MAX_INQUIRIES,
-        "my_permissions": {a: can(actor, a) for a in ("read", "create", "update", "delete", "approve", "export")},
+        "currency": "IRR",
+        "my_permissions": {a: can(actor, a) for a in ("read", "create", "update", "delete", "approve", "export", "manage_catalog")},
     }
 
 
@@ -289,22 +306,21 @@ def search_suppliers(actor: User, q: str | None, limit: int = 20) -> list[dict]:
 # ── create / step 1 ──────────────────────────────────────────────────
 def create_request(actor: User, body: BasicIn, ip: str | None = None) -> PurchaseRequest:
     require(actor, "create")
+    no = _clean_request_no(body.request_no)
+    _check_request_no_free(no, None)
     req = PurchaseRequest(
-        status=PurchaseStatus.DRAFT, created_by_user_id=actor.id, updated_by_user_id=actor.id,
+        request_no=no, status=PurchaseStatus.DRAFT, created_by_user_id=actor.id, updated_by_user_id=actor.id,
         request_date=tehran_today(), priority=PurchasePriority.NORMAL, current_step=1,
+        review_status=ReviewStatus.PENDING_REVIEW,
     )
     _apply_basic(req, body)
-    for attempt in range(5):  # two people saving at the same instant may pick the same number
-        req.request_no = _next_request_no()
-        try:
-            with db.session.begin_nested():
-                db.session.add(req)
-                db.session.flush()
-            break
-        except IntegrityError:
-            if attempt == 4:
-                raise ConflictError("تولید شماره درخواست ناموفق بود؛ دوباره تلاش کنید.") from None
-    _event(req, actor, "STATUS", to_status=PurchaseStatus.DRAFT, note="ایجاد درخواست")
+    try:
+        with db.session.begin_nested():
+            db.session.add(req)
+            db.session.flush()
+    except IntegrityError:
+        raise InvalidInputError("این شماره درخواست قبلاً ثبت شده است.", "request_no") from None
+    _event(req, actor, "STATUS", to_status=PurchaseStatus.DRAFT, note="ثبت درخواست")
     _touch(req, actor, "basic", ip)
     _audit(actor, req, "create", {"subject": req.subject, "unit": req.requester_unit}, ip)
     if body.complete:
@@ -315,7 +331,7 @@ def create_request(actor: User, body: BasicIn, ip: str | None = None) -> Purchas
 
 
 def _apply_basic(req: PurchaseRequest, body: BasicIn) -> None:
-    data = body.model_dump(exclude_unset=True, exclude={"complete"})
+    data = body.model_dump(exclude_unset=True, exclude={"complete", "request_no"})
     if "request_date" in data:
         req.request_date = _date(data.pop("request_date"), "request_date", label="تاریخ ثبت") or req.request_date
     for k, v in data.items():
@@ -332,17 +348,25 @@ def _validate_basic(req: PurchaseRequest) -> None:
 
 def save_basic(actor: User, request_id: int, body: BasicIn, ip: str | None = None) -> PurchaseRequest:
     req = _editable(actor, request_id)
-    before = {"subject": req.subject, "priority": req.priority.value}
+    before = {"subject": req.subject, "priority": req.priority.value, "request_no": req.request_no}
+    if body.request_no is not None and " ".join(body.request_no.split()) != req.request_no:
+        no = _clean_request_no(body.request_no)
+        _check_request_no_free(no, req.id)
+        req.request_no = no
     _apply_basic(req, body)
     if body.complete:
         _validate_basic(req)
         if req.status == PurchaseStatus.DRAFT:
             _set_status(req, PurchaseStatus.ENTERING, actor, ip)
     _touch(req, actor, "basic", ip)
-    after = {"subject": req.subject, "priority": req.priority.value}
+    after = {"subject": req.subject, "priority": req.priority.value, "request_no": req.request_no}
     if before != after:
         _audit(actor, req, "update_basic", {"before": before, "after": after}, ip)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise InvalidInputError("این شماره درخواست قبلاً ثبت شده است.", "request_no") from None
     return _load(req.id)
 
 
@@ -362,8 +386,20 @@ def save_items(actor: User, request_id: int, body: ItemsIn, ip: str | None = Non
             continue  # an untouched blank row
         f = f"items.{idx}"
         _need(d["category_id"] in cats, "گروه کالایی را از فهرست انتخاب کنید.", f"{f}.category_id")
+        old = existing.get(d["id"]) if d["id"] is not None else None
+        if d["product_id"] is not None:
+            prod = db.session.get(PurchaseProduct, d["product_id"])
+            _need(prod is not None and (prod.is_active or (old is not None and old.product_id == prod.id)),
+                  "کالا را از فهرست کالاهای ثبت‌شده انتخاب کنید.", f"{f}.product_id")
+            d["name"], d["_code"] = prod.name, prod.code
+        elif old is not None:  # an item already in the request keeps its catalog link (or its legacy free-text name)
+            d["product_id"], d["_code"] = old.product_id, old.product_code
+            d["name"] = old.name if old.product_id else d["name"]
+        else:
+            raise InvalidInputError("کالا را از فهرست کالاهای ثبت‌شده انتخاب کنید.", f"{f}.product_id")
         _need(d["name"], "نام کالا را وارد کنید.", f"{f}.name")
         _need(d["quantity"] is not None and d["quantity"] > 0, "تعداد باید بزرگ‌تر از صفر باشد.", f"{f}.quantity")
+        d["unit"] = " ".join((d["unit"] or "").split())  # free text, only whitespace is tidied
         _need(d["unit"], "واحد اندازه‌گیری را وارد کنید.", f"{f}.unit")
         if d["id"] is not None:
             _need(d["id"] in existing, "قلم کالا در این درخواست پیدا نشد.", f"{f}.id")
@@ -389,6 +425,7 @@ def save_items(actor: User, request_id: int, body: ItemsIn, ip: str | None = Non
         item.position = pos
         item.category_id = d["category_id"]
         item.category_name = cats[d["category_id"]]
+        item.product_id, item.product_code = d["product_id"], d.get("_code")
         item.name, item.specs, item.brand_model = d["name"], d["specs"], d["brand_model"]
         item.quantity, item.unit = d["quantity"], d["unit"]
         item.estimated_unit_price = d["estimated_unit_price"]
@@ -497,6 +534,8 @@ def pipeline_status(req: PurchaseRequest) -> PurchaseStatus:
         return PurchaseStatus.COMPLETED
     if req.purchase_date is not None:
         return PurchaseStatus.AWAITING_DELIVERY
+    if req.selected_inquiry_id is not None and req.sent_to_finance_at is not None:
+        return PurchaseStatus.SENT_TO_FINANCE
     if req.selected_inquiry_id is not None:
         return PurchaseStatus.PURCHASING
     if req.inquiries_finalized_at is not None and req.inquiries:
@@ -544,6 +583,8 @@ def save_inquiries(actor: User, request_id: int, body: InquiriesIn, ip: str | No
             _need(body.shortfall_reason, "علت عدم امکان اخذ سه استعلام را بنویسید.", "shortfall_reason")
 
     _need(req.purchase_date is None, "پس از ثبت خرید، استعلام‌ها قابل تغییر نیستند؛ درخواست باید برای اصلاح بازگردانده شود.", "inquiries")
+    _need(req.sent_to_finance_at is None or req.status == PurchaseStatus.NEEDS_REVISION,
+          "پس از ارسال به مالی، استعلام‌ها قابل تغییر نیستند؛ درخواست باید برای اصلاح بازگردانده شود.", "inquiries")
     before = {q.supplier_id: num(q.total_price) for q in req.inquiries}
     selected_before = next((num(q.total_price) for q in req.inquiries if q.id == req.selected_inquiry_id), None)
     by_supplier = {q.supplier_id: q for q in req.inquiries}
@@ -592,7 +633,7 @@ def save_inquiries(actor: User, request_id: int, body: InquiriesIn, ip: str | No
     elif not req.inquiries:
         req.inquiries_finalized_at = None
     if req.status in (PurchaseStatus.AWAITING_INQUIRY, PurchaseStatus.INQUIRING, PurchaseStatus.AWAITING_SELECTION,
-                      PurchaseStatus.PURCHASING):
+                      PurchaseStatus.PURCHASING, PurchaseStatus.SENT_TO_FINANCE):
         _set_status(req, pipeline_status(req), actor, ip)
     db.session.commit()
     return _load(req.id)
@@ -602,6 +643,7 @@ def _clear_selection(req: PurchaseRequest) -> None:
     req.selected_inquiry_id = None
     req.selection_reasons = None
     req.selection_note = None
+    req.sent_to_finance_at = None
     for i in req.items:
         i.final_unit_price = None
 
@@ -612,6 +654,8 @@ def save_selection(actor: User, request_id: int, body: SelectionIn, ip: str | No
     _need(req.inquiries, "ابتدا استعلام‌ها را ثبت کنید.", "inquiry_id")
     _need(req.inquiries_finalized_at is not None or req.status in (PurchaseStatus.PURCHASING, PurchaseStatus.AWAITING_DELIVERY, PurchaseStatus.NEEDS_REVISION),
           "ابتدا مرحلهٔ استعلام را نهایی کنید.", "inquiry_id")
+    _need(req.sent_to_finance_at is None or req.status == PurchaseStatus.NEEDS_REVISION,
+          "پس از ارسال به مالی، انتخاب تأمین‌کننده قابل تغییر نیست؛ درخواست باید برای اصلاح بازگردانده شود.", "inquiry_id")
     inq = next((q for q in req.inquiries if q.id == body.inquiry_id), None)
     _need(inq is not None, "تأمین‌کنندهٔ برنده را از میان استعلام‌های ثبت‌شده انتخاب کنید.", "inquiry_id")
     _need(inquiry_lines_complete(req, inq), "استعلام انتخاب‌شده برای همهٔ اقلام قیمت ندارد.", "inquiry_id")
@@ -629,6 +673,7 @@ def save_selection(actor: User, request_id: int, body: SelectionIn, ip: str | No
             _need(body.note, "برای «سایر موارد» توضیح بنویسید.", "note")
 
     before = {"inquiry": req.selected_inquiry_id, "prices": {i.id: num(i.final_unit_price) for i in req.items}}
+    req.sent_to_finance_at = None  # a changed selection / price has to go to finance again
     req.selected_inquiry_id = inq.id
     req.selection_reasons = list(body.reasons)
     req.selection_note = body.note
@@ -656,6 +701,7 @@ def save_result(actor: User, request_id: int, body: ResultIn, ip: str | None = N
     _need(set(lines) <= set(by_id), "قلم کالا در این درخواست پیدا نشد.", "lines")
     purchase_date = _date(body.purchase_date, "purchase_date", label="تاریخ انجام خرید")
     if body.complete:
+        _need(req.sent_to_finance_at is not None, "ابتدا درخواست را «ارسال به مالی» کنید.", "purchase_date")
         _need(purchase_date, "تاریخ انجام خرید را وارد کنید.", "purchase_date")
         _need(body.delivery_status is not None, "وضعیت تحویل کالا را مشخص کنید.", "delivery_status")
         _need(set(lines) == set(by_id), "مقدار خریداری‌شدهٔ همهٔ اقلام را وارد کنید.", "lines")
@@ -687,6 +733,38 @@ def save_result(actor: User, request_id: int, body: ResultIn, ip: str | None = N
 
 
 # ── workflow actions ─────────────────────────────────────────────────
+def send_to_finance(actor: User, request_id: int, ip: str | None = None) -> PurchaseRequest:
+    """The selected supplier / agreed prices are final: hand the purchase to finance (ارسال به مالی)."""
+    req = _editable(actor, request_id)
+    _need(req.status == PurchaseStatus.PURCHASING and req.selected_inquiry_id is not None,
+          "ابتدا تأمین‌کنندهٔ برنده را انتخاب و ثبت کنید.", "status")
+    _need(all(i.final_unit_price is not None for i in req.items), "قیمت توافقی همهٔ اقلام باید ثبت شده باشد.", "status")
+    req.sent_to_finance_at = _now()
+    _set_status(req, PurchaseStatus.SENT_TO_FINANCE, actor, ip, note="ارسال به مالی")
+    db.session.commit()
+    return _load(req.id)
+
+
+def set_review_status(actor: User, request_id: int, status: str, note: str | None, ip: str | None = None) -> PurchaseRequest:
+    """The expert's decision on the request (cartable): pending / approved / rejected / needs revision.
+    Works on any request (a paper request may be recorded first and judged later); a rejected request stays in the records."""
+    require(actor, "update")
+    req = _load(request_id)
+    new = ReviewStatus(status)
+    if new in (ReviewStatus.REJECTED, ReviewStatus.NEEDS_REVISION):
+        _need(note, "علت رد یا موارد اصلاحی را بنویسید.", "note")
+    old = req.review_status
+    req.review_status = new
+    req.review_note = note if new != ReviewStatus.PENDING_REVIEW or note else None
+    req.reviewed_at = _now()
+    req.reviewed_by_name = (actor.full_name or "")[:200] or None
+    if old != new:
+        _event(req, actor, "REVIEW", from_status=old, to_status=new, note=note)
+        _audit(actor, req, "review_status_change", {"from": old.value, "to": new.value, "note": note}, ip)
+    db.session.commit()
+    return _load(req.id)
+
+
 def cancel(actor: User, request_id: int, note: str | None, ip: str | None = None) -> PurchaseRequest:
     req = _editable(actor, request_id)
     _need(note, "علت لغو را بنویسید.", "note")

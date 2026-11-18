@@ -1,7 +1,7 @@
 // Request Sample (CRM) store: the list (filters / paging / sort), the dashboard analytics and every
 // workflow call. The backend (services.py) enforces all permissions; `can*` only hides controls.
 import { ApiError, apiDownload, apiFetch, apiFetchBlob, apiFetchPage } from '~/services/backendApi'
-import type { SampleAnalytics, SampleDetail, SampleFile, SampleItem, SampleRow } from '~/utils/requestSample'
+import type { SampleAnalytics, SampleDeliveryMethod, SampleDetail, SampleFile, SampleItem, SampleRow } from '~/utils/requestSample'
 
 export interface SampleFilters {
   search: string
@@ -9,7 +9,6 @@ export interface SampleFilters {
   priority: string
   customer_id: number | null
   customer_name: string
-  product: string
   grade: string
   rep_id: string
   feedback: string
@@ -19,7 +18,7 @@ export interface SampleFilters {
   mine: boolean
 }
 const defaults = (): SampleFilters => ({
-  search: '', statuses: [], priority: 'all', customer_id: null, customer_name: '', product: 'all', grade: 'all',
+  search: '', statuses: [], priority: 'all', customer_id: null, customer_name: '', grade: 'all',
   rep_id: 'all', feedback: 'all', date_from: '', date_to: '', followup_overdue: false, mine: false,
 })
 const pick = (v: string) => (v && v !== 'all' ? v : undefined)
@@ -51,6 +50,7 @@ export const useRequestSampleStore = defineStore('requestSample', () => {
   const canRead = has('read')
   const canCreate = has('create')
   const canExport = has('export')
+  const canManageCatalog = has('manage_catalog')
 
   const filters = reactive<SampleFilters>(defaults())
   const rows = ref<SampleRow[]>([])
@@ -64,7 +64,9 @@ export const useRequestSampleStore = defineStore('requestSample', () => {
   const analytics = ref<SampleAnalytics | null>(null)
   const analyticsLoading = ref(false)
   const granularity = ref<'day' | 'week' | 'month'>('month')
-  const options = ref<{ reps: { id: number, name: string }[], products: string[], grades: string[] }>({ reps: [], products: [], grades: [] })
+  const options = ref<{ reps: { id: number, name: string }[], grades: string[] }>({ reps: [], grades: [] })
+  /** the form's «روش تحویل نمونه» dropdown (active methods only) */
+  const deliveryMethods = ref<SampleDeliveryMethod[]>([])
 
   function query(): Record<string, string | number | boolean | undefined> {
     return {
@@ -72,7 +74,6 @@ export const useRequestSampleStore = defineStore('requestSample', () => {
       status: filters.statuses.length ? filters.statuses.join(',') : undefined,
       priority: pick(filters.priority),
       customer_id: filters.customer_id ?? undefined,
-      product: pick(filters.product),
       grade: pick(filters.grade),
       rep_id: pick(filters.rep_id),
       feedback: pick(filters.feedback),
@@ -116,6 +117,17 @@ export const useRequestSampleStore = defineStore('requestSample', () => {
   }
   const loadOptions = async () => { options.value = await apiFetch('/crm/request-samples/options') }
   const loadReps = () => apiFetch<{ id: number, name: string }[]>('/crm/request-samples/reps')
+
+  /* ── delivery methods: the form reads the active ones; the admin screen manages all of them ── */
+  async function loadDeliveryMethods() {
+    try { deliveryMethods.value = await apiFetch<SampleDeliveryMethod[]>('/crm/request-samples/delivery-methods') }
+    catch { deliveryMethods.value = [] }
+    return deliveryMethods.value
+  }
+  const listDeliveryMethods = () => apiFetch<SampleDeliveryMethod[]>('/crm/request-samples/delivery-methods', { query: { include_inactive: 1 } })
+  const saveDeliveryMethod = (body: { name: string, sort_order?: number, is_active?: boolean }, id?: number) =>
+    apiFetch<SampleDeliveryMethod>(id ? `/crm/request-samples/delivery-methods/${id}` : '/crm/request-samples/delivery-methods', { method: id ? 'PUT' : 'POST', body })
+  const removeDeliveryMethod = (id: number) => apiFetch(`/crm/request-samples/delivery-methods/${id}`, { method: 'DELETE' })
 
   /** any filter change: back to page 1 and refresh the table AND the dashboard together */
   async function apply() {
@@ -185,9 +197,9 @@ export const useRequestSampleStore = defineStore('requestSample', () => {
   }
 
   return {
-    filters, rows, total, page, perPage, sort, loading, error, analytics, analyticsLoading, granularity, options,
-    canRead, canCreate, canExport,
-    load, loadAnalytics, loadOptions, loadReps, apply, setPage, setSort, reset, setStatus,
+    filters, rows, total, page, perPage, sort, loading, error, analytics, analyticsLoading, granularity, options, deliveryMethods,
+    canRead, canCreate, canExport, canManageCatalog,
+    load, loadAnalytics, loadOptions, loadReps, loadDeliveryMethods, listDeliveryMethods, saveDeliveryMethod, removeDeliveryMethod, apply, setPage, setSort, reset, setStatus,
     get, create, update, remove, transition, newRequestFrom, addDispatch, confirmDelivery, deleteDispatch, addFollowUp, updateFollowUp,
     deleteFollowUp, setFeedback, convert, uploadFile, deleteFile, downloadFile, fetchCustomer, exportFile,
   }

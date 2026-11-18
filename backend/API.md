@@ -87,6 +87,29 @@ Merge rules: see AUTHORIZATION.md §11 (DENY > direct ALLOW > role grants; roles
 * `POST /api/crm/request-samples/<id>/delivery` `{delivered_date, received_by?, note?}` — customer received the sample: DISPATCHED → AWAITING_FEEDBACK (follow-up phase). Replaces the old `await_feedback` transition.
 * Follow-ups and final feedback are accepted only after the receipt was confirmed.
 * Reminders (see `app/modules/request_samples/reminders.py`) are generated when the notification list is fetched, once per request / kind / day: `SAMPLE_REMIND_SHIP` (APPROVED), `SAMPLE_REMIND_DELIVER` (DISPATCHED), `SAMPLE_REMIND_FOLLOWUP` (no next follow-up date, or it passed), `SAMPLE_FOLLOWUP_DUE` (once, on the planned date).
-* `GET /api/crm/request-samples/option-items` — consumed-product + grade pick-lists for the request form.
+* `GET /api/crm/request-samples/option-items` — the grade pick-list for the request form (the consumed-product list is no longer served: the product is identified by its grade).
 * `GET /api/me` and the login response now include `roles` and `is_admin`.
 * Migration `a1c5e9d3b7f2` adds `delivered_at`, `delivery_received_by`, `delivery_note`.
+
+## Request samples — grade-only products, dynamic delivery methods (migration `b8e3a5c7d9f1`)
+
+**Items.** A request item is `{grade (required), quantity, unit, number_of_samples, packaging?, specifications?}`.
+`product_name`, `product_category` and `alternative_product` are no longer accepted (`extra="forbid"` → 400);
+the columns stay in the table for old rows (`product_name` is now nullable). List rows expose `grade` (no `product`);
+detail items expose `grade` only. `GET /options` no longer returns `products`; the `product` list filter is gone;
+`/analytics` `top_products` rows are `{grade, requests, quantity_kg}`.
+
+**Delivery methods** (the «روش تحویل نمونه» dropdown) live in `request_sample_delivery_methods` and are managed by an admin.
+A request / shipment stores the chosen **name** as text, so renaming or deleting an entry never rewrites history.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/crm/request-samples/delivery-methods` | `crm.request_sample.read` | active methods, ordered by `sort_order`; `?include_inactive=1` (+ `usage_count`) only with `manage_catalog` |
+| POST | `/api/crm/request-samples/delivery-methods` | `crm.request_sample.manage_catalog` | `{name, sort_order?, is_active?}`; name unique (case-insensitive) → 409 |
+| PUT | `/api/crm/request-samples/delivery-methods/<id>` | `crm.request_sample.manage_catalog` | any of `name`, `sort_order`, `is_active` |
+| DELETE | `/api/crm/request-samples/delivery-methods/<id>` | `crm.request_sample.manage_catalog` | existing requests keep the saved name |
+
+Creating / updating a request or recording a shipment accepts only an **active** method name (400 otherwise); a request that
+already carries a value may keep it unchanged even if the entry was renamed, disabled or deleted afterwards.
+The migration seeds the seven former hard-coded methods plus any other value already stored, and grants the new
+`manage_catalog` permission to the `admin` role.

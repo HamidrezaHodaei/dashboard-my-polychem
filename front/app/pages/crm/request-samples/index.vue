@@ -28,7 +28,7 @@
             v-model="store.filters.search"
             dir="rtl"
             class="pr-9 text-right"
-            placeholder="جستجو: شناسه (شمارهٔ حواله)، مشتری، برند، محصول، گرید..."
+            placeholder="جستجو: شناسه (شمارهٔ حواله)، مشتری، برند، گرید..."
           />
         </div>
         <Select v-model="statusModel">
@@ -50,13 +50,6 @@
           <SelectContent>
             <SelectItem value="all">همهٔ کارشناسان</SelectItem>
             <SelectItem v-for="r in store.options.reps" :key="r.id" :value="String(r.id)">{{ r.name }}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select v-model="store.filters.product">
-          <SelectTrigger><SelectValue placeholder="محصول" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">همهٔ محصولات</SelectItem>
-            <SelectItem v-for="p in store.options.products" :key="p" :value="p">{{ p }}</SelectItem>
           </SelectContent>
         </Select>
         <Select v-model="store.filters.grade">
@@ -157,8 +150,7 @@
                 <p class="font-medium" dir="auto">{{ r.customer.name }}</p>
                 <p v-if="r.customer.brand" class="text-xs text-muted-foreground" dir="auto">برند: {{ r.customer.brand }}</p>
               </TableCell>
-              <TableCell dir="auto">{{ r.product || '—' }}<span v-if="r.items_count > 1" class="text-xs text-muted-foreground"> (+{{ toPersianDigits(r.items_count - 1) }})</span></TableCell>
-              <TableCell dir="auto">{{ r.grade || '—' }}</TableCell>
+              <TableCell dir="auto">{{ r.grade || '—' }}<span v-if="r.items_count > 1" class="text-xs text-muted-foreground"> (+{{ toPersianDigits(r.items_count - 1) }})</span></TableCell>
               <TableCell class="whitespace-nowrap" dir="ltr">{{ r.quantity_label || '—' }}</TableCell>
               <TableCell class="whitespace-nowrap">{{ fmtDate(r.requested_date) }}</TableCell>
               <TableCell>{{ r.sales_rep.name || '—' }}</TableCell>
@@ -222,7 +214,7 @@ const notify = useNotify()
 const route = useRoute()
 
 const COLUMNS = [
-  { label: 'شناسه', sort: 'id' }, { label: 'مشتری', sort: 'customer' }, { label: 'محصول' }, { label: 'گرید' },
+  { label: 'شناسه', sort: 'id' }, { label: 'مشتری', sort: 'customer' }, { label: 'گرید' },
   { label: 'مقدار نمونه' }, { label: 'تاریخ ثبت', sort: 'requested_date' }, { label: 'کارشناس فروش' },
   { label: 'اولویت', sort: 'priority' }, { label: 'وضعیت', sort: 'status' }, { label: 'بازخورد مشتری', sort: 'feedback' },
   { label: 'عملیات' },

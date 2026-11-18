@@ -86,6 +86,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.logistics.routes import bp as logistics_bp
     from app.modules.purchases.routes import bp as purchases_bp
     from app.modules.notifications.routes import bp as notifications_bp
+    from app.modules.mail.routes import bp as mail_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
@@ -122,6 +123,9 @@ def _register_blueprints(app: Flask) -> None:
 
     # In-app notifications (header bell) — /api/notifications.
     app.register_blueprint(notifications_bp)
+
+    # Correspondence (مکاتبات) — organizational internal mail, /api/mail.
+    app.register_blueprint(mail_bp)
 
     # Other business module blueprints (CRM, Finance, Warehouse, ...) are
     # added starting later phases — intentionally absent here.

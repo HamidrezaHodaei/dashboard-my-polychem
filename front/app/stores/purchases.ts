@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { apiDownload, apiFetch, apiFetchBlob, apiFetchPage } from '~/services/backendApi'
-import type { Dashboard, PFile, PurchaseFilters, PurchaseMeta, PurchaseRequest, PurchaseRow, StepKey } from '~/utils/purchase'
+import type { CatalogProduct, Dashboard, DirectPurchase, PFile, PurchaseFilters, PurchaseMeta, PurchaseRequest, PurchaseRow, StepKey } from '~/utils/purchase'
 
 const emptyFilters = (): PurchaseFilters => ({
-  date_from: '', date_to: '', category_id: '', status: '', supplier: '', unit: '', request_no: '', item: '', granularity: 'month',
+  date_from: '', date_to: '', category_id: '', status: '', review_status: '', supplier: '', unit: '', request_no: '', item: '', granularity: 'month',
 })
 
 export const usePurchasesStore = defineStore('purchases', () => {
@@ -19,6 +19,10 @@ export const usePurchasesStore = defineStore('purchases', () => {
   const sort = ref('created_at')
   const direction = ref<'asc' | 'desc'>('desc')
   const kpi = ref('') // KPI whose details the list currently shows
+  const directRows = ref<DirectPurchase[]>([])
+  const directTotal = ref(0)
+  const directPage = ref(1)
+  const directLoading = ref(false)
   const listLoading = ref(false)
   const listError = ref('')
 
@@ -29,7 +33,7 @@ export const usePurchasesStore = defineStore('purchases', () => {
     const f = filters
     return {
       date_from: f.date_from || undefined, date_to: f.date_to || undefined, category_id: f.category_id || undefined,
-      status: f.status || undefined, supplier: f.supplier.trim() || undefined, unit: f.unit.trim() || undefined,
+      status: f.status || undefined, review_status: f.review_status || undefined, supplier: f.supplier.trim() || undefined, unit: f.unit.trim() || undefined,
       request_no: f.request_no.trim() || undefined, item: f.item.trim() || undefined, granularity: f.granularity,
     }
   }
@@ -77,10 +81,27 @@ export const usePurchasesStore = defineStore('purchases', () => {
     }
   }
 
-  /** A filter changed: everything (KPIs, charts, groups, table) is refreshed from the same filters. */
+  async function loadDirect() {
+    directLoading.value = true
+    try {
+      const res = await apiFetchPage<DirectPurchase>('/purchases/direct', { ...query(), page: directPage.value, per_page: 15, sort: 'purchase_date', direction: 'desc' })
+      directRows.value = res.items
+      directTotal.value = res.total
+    }
+    catch { directRows.value = [] }
+    finally { directLoading.value = false }
+  }
+  const saveDirect = (body: Record<string, unknown>, id?: number) =>
+    apiFetch<DirectPurchase>(id ? `/purchases/direct/${id}` : '/purchases/direct', { method: id ? 'PUT' : 'POST', body })
+  const deleteDirect = (id: number) => apiFetch(`/purchases/direct/${id}`, { method: 'DELETE' })
+  const setReview = (id: number, status: string, note: string) =>
+    apiFetch<PurchaseRequest>(`/purchases/${id}/review`, { method: 'POST', body: { status, note: note || null } })
+
+  /** A filter changed: everything (KPIs, charts, groups, both tables) is refreshed from the same filters. */
   function applyFilters() {
     page.value = 1
-    return Promise.all([loadDashboard(), loadList()])
+    directPage.value = 1
+    return Promise.all([loadDashboard(), loadList(), loadDirect()])
   }
   function resetFilters() {
     Object.assign(filters, emptyFilters())
@@ -99,10 +120,19 @@ export const usePurchasesStore = defineStore('purchases', () => {
   const create = (body: Record<string, unknown>) => apiFetch<PurchaseRequest>('/purchases', { method: 'POST', body })
   const saveStep = (id: number, step: StepKey, body: Record<string, unknown>) =>
     apiFetch<PurchaseRequest>(`/purchases/${id}/${step}`, { method: 'PUT', body })
-  const action = (id: number, name: 'submit' | 'cancel' | 'send-back' | 'approve-reference', body?: Record<string, unknown>) =>
+  const action = (id: number, name: 'submit' | 'cancel' | 'send-back' | 'approve-reference' | 'send-to-finance', body?: Record<string, unknown>) =>
     apiFetch<PurchaseRequest>(`/purchases/${id}/${name}`, { method: 'POST', body })
   const remove = (id: number) => apiFetch(`/purchases/${id}`, { method: 'DELETE' })
   const searchSuppliers = (q: string) => apiFetch<{ id: number, name: string, category: string | null }[]>('/purchases/suppliers', { query: { q } })
+
+  const searchProducts = (q: string, category_id?: number | null) =>
+    apiFetch<CatalogProduct[]>('/purchases/products', { query: { q: q || undefined, category_id: category_id || undefined } })
+  const searchUnits = (q: string) => apiFetch<string[]>('/purchases/units', { query: { q: q || undefined } })
+  /** admin catalog */
+  const listProducts = (query: Record<string, string | number | undefined>) => apiFetchPage<CatalogProduct>('/purchases/products', { ...query, include_inactive: 1 })
+  const saveProduct = (body: Record<string, unknown>, id?: number) =>
+    apiFetch<CatalogProduct>(id ? `/purchases/products/${id}` : '/purchases/products', { method: id ? 'PATCH' : 'POST', body })
+  const deleteProduct = (id: number) => apiFetch(`/purchases/products/${id}`, { method: 'DELETE' })
 
   async function upload(file: File): Promise<PFile> {
     const fd = new FormData()
@@ -130,8 +160,9 @@ export const usePurchasesStore = defineStore('purchases', () => {
       '/purchases/export', { query: { ...query(), kind, format: 'json' } })
 
   return {
+    directRows, directTotal, directPage, directLoading, loadDirect, saveDirect, deleteDirect, setReview,
     meta, filters, dashboard, dashLoading, dashError, rows, total, page, perPage, sort, direction, kpi, listLoading, listError,
     can, loadMeta, loadDashboard, loadList, applyFilters, resetFilters, setSort, setPage,
-    fetchOne, create, saveStep, action, remove, searchSuppliers, upload, downloadFile, exportExcel, exportRows,
+    fetchOne, create, saveStep, action, remove, searchSuppliers, searchProducts, searchUnits, listProducts, saveProduct, deleteProduct, upload, downloadFile, exportExcel, exportRows,
   }
 })
