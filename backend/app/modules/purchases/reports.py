@@ -114,7 +114,7 @@ def _like(text: str) -> str:
 
 def conditions(f: Filters, *, with_dates: bool = True, with_statuses: bool = True, exclude_drafts: bool = False) -> list:
     R = PurchaseRequest
-    c = [R.deleted_at.is_(None)]
+    c = [R.deleted_at.is_(None), R.flow_version == 1]   # item-based requests (flow.py) have their own KPIs
     if exclude_drafts:
         c.append(R.status != PurchaseStatus.DRAFT)
     if with_dates and f.date_from:

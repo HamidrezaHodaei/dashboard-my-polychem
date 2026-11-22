@@ -59,7 +59,7 @@
 </template>
 
 <script lang="ts" setup>
-const colorMode = useColorMode()
+const { colorMode, setColorMode } = useThemeTransition()
 
 const options = [
   { label: 'سیستم', value: 'system', icon: 'lucide:monitor' },
@@ -73,7 +73,7 @@ const selected = computed({
     return preference.value.value
   },
   set(option) {
-    colorMode.preference = option
+    setColorMode(option as ColorModePreference)
   },
 })
 

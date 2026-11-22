@@ -24,7 +24,7 @@
         isFinanceRoute ? 'overflow-y-auto px-4 py-6 sm:px-6 lg:px-8' : 'overflow-hidden',
       ]">
         <div :class="[
-          isFinanceRoute ? 'finance-content mx-auto w-full max-w-screen-2xl' : '',
+          isFinanceRoute ? `finance-content mx-auto w-full ${container === 'centered' ? 'max-w-7xl' : 'max-w-screen-2xl'}` : '',
           isMailRoute && 'h-full min-h-0',
         ]">
           <slot />
@@ -42,8 +42,7 @@ import { SIDEBAR_COOKIE_NAME } from '~/components/ui/sidebar/utils'
 const defaultOpen = useCookie<boolean>(SIDEBAR_COOKIE_NAME)
 
 const color = ref<SidebarProps['color']>('background')
-const variant = ref<SidebarProps['variant']>('sidebar')
-const container = ref<'fluid' | 'centered'>('fluid')
+const { sidebarVariant: variant, contentWidth: container } = useAppearance()
 const route = useRoute()
 const isFinanceRoute = computed(() => route.path === '/finance' || route.path.startsWith('/finance/'))
 const isMailRoute = computed(() => route.path === '/mail' || route.path.startsWith('/mail/'))

@@ -24,6 +24,9 @@ const { title, description } = useAppConfig()
 const ogImage = `${$config.public.siteUrl}/og-banner.png`
 
 const colorMode = useColorMode()
+const { palette } = useAppearance()
+
+useHead({ htmlAttrs: { 'data-palette': palette } })
 
 useSeoMeta({
   title,

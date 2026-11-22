@@ -138,6 +138,7 @@ class ApproveReferenceIn(BaseModel):
 class ProductIn(_Body):
     name: str | None = Field(default=None, max_length=255)
     code: str | None = Field(default=None, max_length=64)
+    unit: str | None = Field(default=None, max_length=40)
     category_id: int | None = None
     is_active: bool | None = None
 

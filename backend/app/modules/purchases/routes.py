@@ -132,7 +132,7 @@ def upload():
 @bp.get("/files/<file_id>")
 @require_authenticated
 def download(file_id: str):
-    services.require(g.current_user, "read")
+    services.require_any(g.current_user, services.READERS)
     row = files.get_file_or_404(file_id)
     resp = send_file(files.disk_path(row), as_attachment=True, download_name=row.original_name,
                      mimetype=row.content_type or "application/octet-stream")

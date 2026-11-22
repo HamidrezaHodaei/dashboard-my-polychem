@@ -84,6 +84,10 @@ from app.modules.purchases.models import (  # noqa: F401,E402
     PurchaseInquiry,
     PurchaseInquiryItem,
     PurchaseItem,
+    PurchaseItemPayment,
+    PurchaseItemQuote,
+    PurchaseOption,
     PurchaseProduct,
     PurchaseRequest,
+    PurchaseSla,
 )

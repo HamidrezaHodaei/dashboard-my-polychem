@@ -85,6 +85,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.request_samples.routes import bp as request_samples_bp
     from app.modules.logistics.routes import bp as logistics_bp
     from app.modules.purchases.routes import bp as purchases_bp
+    from app.modules.purchases.flow_routes import bp as purchase_flow_bp
     from app.modules.notifications.routes import bp as notifications_bp
     from app.modules.mail.routes import bp as mail_bp
 
@@ -120,6 +121,8 @@ def _register_blueprints(app: Flask) -> None:
 
     # Procurement -- Purchase Reports (purchase requests, inquiries, KPI dashboard, exports).
     app.register_blueprint(purchases_bp)
+    # Item-based purchase flow: warehouse -> procurement -> manager -> finance -> delivery, plus its KPIs.
+    app.register_blueprint(purchase_flow_bp)
 
     # In-app notifications (header bell) — /api/notifications.
     app.register_blueprint(notifications_bp)

@@ -65,6 +65,19 @@ def can(actor: User, action: str) -> bool:
     return has_permission(actor, _key(action), None, None)
 
 
+# every action that lets a person see purchase data (the item-based flow adds warehouse / procure / manager / finance)
+READERS = ("read", "warehouse", "procure", "manager", "finance")
+
+
+def can_any(actor: User, actions) -> bool:
+    return any(can(actor, a) for a in actions)
+
+
+def require_any(actor: User, actions) -> None:
+    if not can_any(actor, actions):
+        raise PermissionDeniedError("permission_denied", f"Missing one of the permissions {[_key(a) for a in actions]}.")
+
+
 def viewer_flags(actor: User, req: PurchaseRequest) -> dict:
     open_ = req.status not in CLOSED
     return {
@@ -145,7 +158,8 @@ def _touch(req: PurchaseRequest, actor: User, step: str, ip: str | None) -> None
 # ── loading ──────────────────────────────────────────────────────────
 def _load(request_id: int) -> PurchaseRequest:
     req = db.session.scalars(
-        select(PurchaseRequest).where(PurchaseRequest.id == request_id, PurchaseRequest.deleted_at.is_(None))
+        select(PurchaseRequest).where(PurchaseRequest.id == request_id, PurchaseRequest.deleted_at.is_(None),
+                                      PurchaseRequest.flow_version == 1)   # item-based requests live in flow.py
         .options(
             selectinload(PurchaseRequest.items),
             selectinload(PurchaseRequest.inquiries).selectinload(PurchaseInquiry.lines),
@@ -290,7 +304,7 @@ def meta(actor: User) -> dict:
 
 def search_suppliers(actor: User, q: str | None, limit: int = 20) -> list[dict]:
     """Suppliers from the supplier bank that may be quoted (not inactive / removed)."""
-    require(actor, "read")
+    require_any(actor, ("read", "procure", "manager"))
     stmt = select(Supplier).where(Supplier.deleted_at.is_(None), Supplier.is_active.is_(True),
                                   Supplier.status != SupplierStatus.INACTIVE)
     if q and q.strip():
@@ -805,7 +819,6 @@ def delete_request(actor: User, request_id: int, ip: str | None = None) -> None:
 
 
 def upload_file(actor: User, file) -> PurchaseFile:
-    if not (can(actor, "create") or can(actor, "update")):
-        require(actor, "create")
+    require_any(actor, ("create", "update", "warehouse", "procure", "finance"))
     from app.modules.purchases import files
     return files.save_upload(file, uploaded_by_user_id=actor.id)

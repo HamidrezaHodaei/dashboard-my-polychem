@@ -45,6 +45,14 @@ class PurchaseStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"                      # پایان‌یافته (value kept from the first release)
     CANCELLED = "CANCELLED"                      # لغوشده
     NEEDS_REVISION = "NEEDS_REVISION"            # نیازمند اصلاح اطلاعات
+    # -- statuses of the item-based flow (flow_version = 2), see flow.py --
+    UNDER_REVIEW = "UNDER_REVIEW"                # در حال بررسی (first status, set by the system)
+    SOURCING = "SOURCING"                        # در حال استعلام و تأمین
+    REFERRED_FINANCE = "REFERRED_FINANCE"        # ارجاع استعلام به مالی (set by the system)
+    FOLLOW_UP = "FOLLOW_UP"                      # پیگیری پرداخت و حمل (set by the system)
+    PARTIAL_DELIVERY = "PARTIAL_DELIVERY"        # تحویل داده‌شده – جزئی (computed from the items)
+    RETURNED = "RETURNED"                        # استرداد جهت اصلاح
+    VOID = "VOID"                                # ابطال
 
 
 # Statuses in which a request is "open / in progress" (KPI 3). A draft is not yet a request in the
@@ -79,6 +87,33 @@ class ReferenceSource(str, enum.Enum):
     CONTRACT = "CONTRACT"              # قرارداد یا تعرفه تأییدشده
     PRICE_LIST = "PRICE_LIST"          # لیست قیمت رسمی / پیش‌فاکتور مبنا
     OTHER = "OTHER"
+
+
+class ItemStatus(str, enum.Enum):
+    """Status of ONE goods line of a request (flow_version 2). Every line moves on its own."""
+    PENDING = "PENDING"                      # ثبت‌شده، هنوز وارد استعلام نشده
+    INQUIRY = "INQUIRY"                      # در حال استعلام و تأمین
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"  # منتظر تأیید مدیر
+    IN_FINANCE = "IN_FINANCE"                # تأیید شده و ارجاع‌شده به مالی (در انتظار پرداخت)
+    PAID = "PAID"                            # پرداخت‌شده
+    SHIPPING = "SHIPPING"                    # در حال حمل
+    DELIVERED = "DELIVERED"                  # تحویل داده‌شده
+    CANCELLED = "CANCELLED"                  # ابطال
+
+
+class SupplyPlace(str, enum.Enum):
+    LOCAL = "LOCAL"          # محلی
+    NON_LOCAL = "NON_LOCAL"  # غیرمحلی
+
+
+class PurchaseSubject(str, enum.Enum):
+    ASSET = "ASSET"          # دارایی
+    GENERAL = "GENERAL"      # عمومی
+
+
+class PayMethod(str, enum.Enum):
+    CASH = "CASH"            # نقدی
+    CHEQUE = "CHEQUE"        # چکی
 
 
 class PurchaseRequest(TimestampMixin, SoftDeleteMixin, db.Model):
@@ -145,6 +180,10 @@ class PurchaseRequest(TimestampMixin, SoftDeleteMixin, db.Model):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     status_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)  # cancel / revision reason
+
+    # 1 = the original request-level workflow (kept readable), 2 = the item-based flow (flow.py)
+    flow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)   # SLA clock starts here
 
     review_status: Mapped[ReviewStatus] = mapped_column(
         SAEnum(ReviewStatus, name="purchase_review_status", native_enum=False, length=20),
@@ -227,7 +266,126 @@ class PurchaseItem(TimestampMixin, db.Model):
     final_unit_price: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     purchased_quantity: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)
 
+    # -- item-based flow (flow_version 2): every column below belongs to THIS line only --
+    current_stock: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)   # موجودی فعلی انبار (manual)
+    reorder_point: Mapped[float | None] = mapped_column(Numeric(18, 3), nullable=True)   # نقطه سفارش (optional)
+    request_type: Mapped[str | None] = mapped_column(String(150), nullable=True)         # نوع درخواست (admin list)
+    purchase_subject: Mapped[PurchaseSubject | None] = mapped_column(
+        SAEnum(PurchaseSubject, name="purchase_subject", native_enum=False, length=10), nullable=True)
+    priority: Mapped[PurchasePriority | None] = mapped_column(
+        SAEnum(PurchasePriority, name="purchase_item_priority", native_enum=False, length=10), nullable=True)
+    item_status: Mapped[ItemStatus] = mapped_column(
+        SAEnum(ItemStatus, name="purchase_item_status", native_enum=False, length=20),
+        nullable=False, default=ItemStatus.PENDING, server_default="PENDING")
+    supply_place: Mapped[SupplyPlace | None] = mapped_column(
+        SAEnum(SupplyPlace, name="purchase_supply_place", native_enum=False, length=10), nullable=True)
+    selected_quote_id: Mapped[int | None] = mapped_column(BigIntUnsigned, nullable=True)  # plain id: no circular FK
+    manager_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    approved_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)       # finance returned it as paid
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # KPI: delivered on time?
+    delivered_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    receipt_file_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("purchase_files.id", ondelete="SET NULL", use_alter=True,
+                               name="fk_purchase_items_receipt_file"), nullable=True)
+    receipt_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)   # cancel / manager-return reason
+
     request: Mapped[PurchaseRequest] = relationship("PurchaseRequest", back_populates="items")
+    quotes: Mapped[list["PurchaseItemQuote"]] = relationship(
+        "PurchaseItemQuote", back_populates="item", cascade="all, delete-orphan", passive_deletes=True,
+        order_by="PurchaseItemQuote.position")
+    payment: Mapped["PurchaseItemPayment | None"] = relationship(
+        "PurchaseItemPayment", back_populates="item", cascade="all, delete-orphan", passive_deletes=True, uselist=False)
+    receipt_file = relationship("PurchaseFile", foreign_keys=[receipt_file_id])
+
+
+class PurchaseItemQuote(TimestampMixin, db.Model):
+    """One supplier quotation for ONE item (flow v2). An item may have several, each item is independent."""
+    __tablename__ = "purchase_item_quotes"
+    __table_args__ = (Index("ix_purchase_item_quotes_item", "item_id"),)
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    item_id: Mapped[int] = mapped_column(
+        BigIntUnsigned, ForeignKey("purchase_items.id", ondelete="CASCADE"), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    supplier_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True)
+    supplier_name: Mapped[str] = mapped_column(String(255), nullable=False)            # snapshot
+    unit_price: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)          # whole rials
+    received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    validity_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    delivery_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payment_method: Mapped[PayMethod | None] = mapped_column(
+        SAEnum(PayMethod, name="purchase_pay_method", native_enum=False, length=10), nullable=True)
+    payment_terms: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("purchase_files.id", ondelete="SET NULL"), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    item: Mapped[PurchaseItem] = relationship("PurchaseItem", back_populates="quotes")
+    file = relationship("PurchaseFile", foreign_keys=[file_id])
+
+
+class PurchaseItemPayment(TimestampMixin, db.Model):
+    """The payment of ONE item, recorded by finance. Written once -- never overwritten."""
+    __tablename__ = "purchase_item_payments"
+    __table_args__ = (UniqueConstraint("item_id", name="uq_purchase_item_payments_item"),)
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    item_id: Mapped[int] = mapped_column(
+        BigIntUnsigned, ForeignKey("purchase_items.id", ondelete="CASCADE"), nullable=False)
+    quote_id: Mapped[int | None] = mapped_column(BigIntUnsigned, nullable=True)
+    method: Mapped[PayMethod] = mapped_column(
+        SAEnum(PayMethod, name="purchase_payment_method", native_enum=False, length=10), nullable=False)
+    amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    # cash
+    paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    payment_ref: Mapped[str | None] = mapped_column(String(100), nullable=True)           # شناسه پرداخت
+    receipt_file_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("purchase_files.id", ondelete="SET NULL"), nullable=True)
+    # cheque
+    cheque_file_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("purchase_files.id", ondelete="SET NULL"), nullable=True)
+    cheque_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cheque_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
+    cheque_issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    cheque_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    cheque_bank: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    cheque_payee: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    recorded_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    item: Mapped[PurchaseItem] = relationship("PurchaseItem", back_populates="payment")
+    receipt_file = relationship("PurchaseFile", foreign_keys=[receipt_file_id])
+    cheque_file = relationship("PurchaseFile", foreign_keys=[cheque_file_id])
+
+
+class PurchaseOption(TimestampMixin, db.Model):
+    """Admin-managed pick lists of the request form: requesting units (kind UNIT) and request types (REQUEST_TYPE)."""
+    __tablename__ = "purchase_options"
+    __table_args__ = (UniqueConstraint("kind", "label", name="uq_purchase_options_kind_label"),)
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    label: Mapped[str] = mapped_column(String(150), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(db.Boolean, nullable=False, default=True, server_default="1")
+
+
+class PurchaseSla(TimestampMixin, db.Model):
+    """Allowed supply + delivery time per priority (set by the system admin); the base of the KPIs."""
+    __tablename__ = "purchase_sla"
+    __table_args__ = (UniqueConstraint("priority", name="uq_purchase_sla_priority"),)
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    priority: Mapped[str] = mapped_column(String(10), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit: Mapped[str] = mapped_column(String(5), nullable=False, default="DAYS", server_default="DAYS")  # DAYS | HOURS
+    updated_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
 class PurchaseInquiry(TimestampMixin, db.Model):
@@ -296,6 +454,8 @@ class PurchaseEvent(db.Model):
     )
     kind: Mapped[str] = mapped_column(String(20), nullable=False)       # STEP | STATUS | REFERENCE
     step: Mapped[str | None] = mapped_column(String(20), nullable=True)  # basic|items|budget|inquiries|selection|result
+    # flow v2: the goods line this entry is about (kind ITEM); NULL = the whole request
+    item_id: Mapped[int | None] = mapped_column(BigIntUnsigned, nullable=True)
     from_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     to_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
@@ -316,6 +476,7 @@ class PurchaseProduct(TimestampMixin, db.Model):
     id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(40), nullable=True)   # واحد اندازه‌گیری: fills the request line
     category_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned, ForeignKey("supplier_categories.id", ondelete="SET NULL"), nullable=True
     )

@@ -30,6 +30,7 @@
 
       <div class="flex items-center gap-x-3">
         <HeaderNotifications />
+        <SettingsAppearanceSheet />
         <ColorModeButton />
         <div class="h-6">
           <Separator

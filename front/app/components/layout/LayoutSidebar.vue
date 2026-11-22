@@ -105,119 +105,34 @@ const baseNav: SidebarProps['nav'] = [
       {
         title: 'مالی',
         icon: 'lucide:landmark',
-        adminOnly: true,
         activeRoute: ['/finance'],
+        navKey: 'purchase_finance',
         children: [
           {
-            title: 'پیشخوان',
+            title: 'درخواست پرداخت',
+            icon: 'lucide:banknote',
             link: {
-              to: '/finance/dashboard',
+              to: '/finance',
             },
-            activeRoute: ['/finance', '/finance/dashboard'],
-          },
-          {
-            title: 'حساب‌ها',
-            link: {
-              to: '/finance/accounts',
-            },
-            activeRoute: ['/finance/accounts'],
-          },
-          {
-            title: 'تراکنش‌ها',
-            link: {
-              to: '/finance/transactions',
-            },
-            activeRoute: ['/finance/transactions'],
-          },
-          {
-            title: 'مشتریان',
-            link: {
-              to: '/finance/customers',
-            },
-            activeRoute: ['/finance/customers'],
-          },
-          {
-            title: 'طرف‌حساب‌ها',
-            link: {
-              to: '/finance/parties',
-            },
-            activeRoute: ['/finance/parties'],
-          },
-          {
-            title: 'خریدها و هزینه‌ها',
-            link: {
-              to: '/finance/purchases',
-            },
-            activeRoute: ['/finance/purchases', '/finance/expenses'],
-          },
-          {
-            title: 'گزارش‌ها',
-            link: {
-              to: '/finance/reports',
-            },
-            activeRoute: ['/finance/reports'],
-          },
-          {
-            title: 'تنظیمات',
-            link: {
-              to: '/finance/settings',
-            },
-            activeRoute: ['/finance/settings'],
+            activeRoute: ['/finance'],
+            navKey: 'purchase_finance',
           },
         ],
       },
       {
         title: 'انبار',
         icon: 'lucide:warehouse',
-        adminOnly: true,
+        activeRoute: ['/inventory'],
+        navKey: 'purchase_warehouse',
         children: [
           {
-            title: 'پیشخوان',
+            title: 'درخواست خرید',
+            icon: 'lucide:shopping-cart',
             link: {
               to: '/inventory',
             },
-          },
-          {
-            title: 'موجودی کالا',
-            link: {
-              to: '/inventory/stock',
-            },
-          },
-          {
-            title: 'ورودی انبار',
-            link: {
-              to: '/inventory/inbound',
-            },
-          },
-          {
-            title: 'خروجی انبار',
-            link: {
-              to: '/inventory/outbound',
-            },
-          },
-          {
-            title: 'گردش موجودی',
-            link: {
-              to: '/inventory/movements',
-            },
-          },
-          {
-            title: 'انتقال‌ها',
-            link: {
-              to: '/inventory/transfers',
-            },
-          },
-          {
-            title: 'گزارش‌ها',
-            link: {
-              to: '/inventory/reports',
-            },
-          },
-          {
-            title: 'تنظیمات',
-            link: {
-              to: '/inventory/settings',
-            },
+            activeRoute: ['/inventory'],
+            navKey: 'purchase_warehouse',
           },
         ],
       },

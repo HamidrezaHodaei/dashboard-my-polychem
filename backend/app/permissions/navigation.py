@@ -37,15 +37,19 @@ def _resource_prefix(permission: str) -> str:
     return f"{module}.{resource}."
 
 
-def _entry(key: str, label: str, path: str, permission: str, also_gated_by: tuple[str, ...] = ()) -> dict:
+def _entry(key: str, label: str, path: str, permission: str, also_gated_by: tuple[str, ...] = (),
+           only: tuple[str, ...] = ()) -> dict:
     if permission not in REGISTRY:
         raise KeyError(
             f"Navigation entry {key!r} references undefined permission {permission!r}"
         )
-    for extra in also_gated_by:
+    for extra in (*also_gated_by, *only):
         if extra not in REGISTRY:
             raise KeyError(f"Navigation entry {key!r} references undefined permission {extra!r}")
     prefix = _resource_prefix(permission)
+    if only:  # an entry gated by an explicit set of permissions instead of "anything under the resource"
+        return {"key": key, "label": label, "path": path, "permission": permission,
+                "_gating_permissions": tuple(only)}
     # export / print are not a reason to show a section on their own (they only matter next to `read`)
     gating_permissions = tuple(
         k for k in REGISTRY if k.startswith(prefix) and k.rsplit(".", 1)[-1] not in ("export", "print")
@@ -77,7 +81,15 @@ _NAVIGATION_CATALOG: list[dict] = [
     _entry("tasks", "Tasks", "/tasks", "tasks.task.read"),
     _entry("task_analytics", "Task Analytics", "/tasks/analytics", "tasks.analytics.read"),
     _entry("suppliers", "Suppliers", "/procurement/suppliers", "procurement.supplier.read"),
-    _entry("purchase_reports", "Purchase Reports", "/procurement/purchases", "procurement.purchase.read"),
+    # Purchase Reports: the procurement cartable / manager approval / management report. Not shown to the
+    # warehouse or finance units, who have their own pages below.
+    _entry("purchase_reports", "Purchase Reports", "/procurement/purchases", "procurement.purchase.read",
+           only=tuple(f"procurement.purchase.{a}" for a in (
+               "read", "create", "update", "delete", "approve", "manage_catalog", "procure", "manager", "settings"))),
+    _entry("purchase_warehouse", "Warehouse", "/inventory", "procurement.purchase.warehouse",
+           only=("procurement.purchase.warehouse",)),
+    _entry("purchase_finance", "Finance", "/finance", "procurement.purchase.finance",
+           only=("procurement.purchase.finance",)),
     _entry("customers", "Customers", "/crm/customers", "crm.customer.read"),
     _entry("crm_sales", "Sales", "/crm/sales", "crm.sale.read"),
     _entry("crm_dashboard", "Sales Dashboard", "/crm/dashboard", "crm.sale.read"),

@@ -23,12 +23,13 @@
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-muted/50 text-muted-foreground"><tr>
-            <th class="p-3 text-right">نام کالا</th><th class="p-3 text-right">کد کالا</th><th class="p-3 text-right">گروه کالایی</th><th class="p-3">وضعیت</th><th class="p-3">تعداد استفاده</th><th class="p-3" />
+            <th class="p-3 text-right">نام کالا</th><th class="p-3 text-right">کد کالا</th><th class="p-3 text-right">واحد</th><th class="p-3 text-right">گروه کالایی</th><th class="p-3">وضعیت</th><th class="p-3">تعداد استفاده</th><th class="p-3" />
           </tr></thead>
           <tbody>
             <tr v-for="p in rows" :key="p.id" class="border-t">
               <td class="p-3">{{ p.name }}</td>
               <td class="p-3" dir="ltr"><span class="block text-right">{{ p.code || '—' }}</span></td>
+              <td class="p-3">{{ p.unit || '—' }}</td>
               <td class="p-3">{{ p.category_name || '—' }}</td>
               <td class="p-3 text-center"><span class="rounded-full px-2 py-0.5 text-xs" :class="p.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-muted text-muted-foreground'">{{ p.is_active ? 'فعال' : 'غیرفعال' }}</span></td>
               <td class="p-3 text-center">{{ count(p.used_count ?? 0) }}</td>
@@ -58,6 +59,9 @@
           <PurchasesField label="نام کالا" required :error="errs.name"><Input v-model="form.name" /></PurchasesField>
           <PurchasesField label="کد کالا" :error="errs.code" hint="دستی وارد می‌شود؛ می‌تواند ترکیبی از حروف، عدد و - _ . / \ + # باشد (مثلاً RS-0012/A یا 007)">
             <Input v-model="form.code" dir="ltr" class="text-right" autocomplete="off" />
+          </PurchasesField>
+          <PurchasesField label="واحد اندازه‌گیری" :error="errs.unit" hint="در ثبت درخواست خرید به‌صورت خودکار پر می‌شود">
+            <Input v-model="form.unit" />
           </PurchasesField>
           <PurchasesField label="گروه کالایی (پیش‌فرض این کالا)" :error="errs.category_id">
             <select v-model="form.category_id" class="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm">
@@ -112,13 +116,13 @@ const debounced = () => { clearTimeout(timer); timer = setTimeout(() => reload(1
 
 const formOpen = ref(false)
 const editing = ref<CatalogProduct | null>(null)
-const form = reactive({ name: '', code: '', category_id: '', is_active: true })
+const form = reactive({ name: '', code: '', unit: '', category_id: '', is_active: true })
 const errs = ref<Record<string, string>>({})
 const formError = ref('')
 const busy = ref(false)
 function openForm(p?: CatalogProduct) {
   editing.value = p ?? null
-  Object.assign(form, { name: p?.name ?? '', code: p?.code ?? '', category_id: p?.category_id ? String(p.category_id) : '', is_active: p?.is_active ?? true })
+  Object.assign(form, { name: p?.name ?? '', code: p?.code ?? '', unit: p?.unit ?? '', category_id: p?.category_id ? String(p.category_id) : '', is_active: p?.is_active ?? true })
   errs.value = {}
   formError.value = ''
   formOpen.value = true
@@ -129,7 +133,7 @@ async function submit() {
   formError.value = ''
   try {
     // the code is sent exactly as typed (a string, never converted to a number)
-    await store.saveProduct({ name: form.name, code: form.code, category_id: form.category_id ? Number(form.category_id) : null, is_active: form.is_active }, editing.value?.id)
+    await store.saveProduct({ name: form.name, code: form.code, unit: form.unit, category_id: form.category_id ? Number(form.category_id) : null, is_active: form.is_active }, editing.value?.id)
     formOpen.value = false
     notify.success(editing.value ? 'کالا ویرایش شد' : 'کالا تعریف شد')
     store.meta = null

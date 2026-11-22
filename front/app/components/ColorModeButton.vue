@@ -4,7 +4,7 @@
       variant="ghost"
       size="icon"
       :aria-label="`تغییر به حالت ${isDark ? 'روشن' : 'تیره'}`"
-      @click="isDark = !isDark"
+      @click="toggleColorMode($event)"
     >
       <span class="size-9 items-center justify-center inline-flex dark:hidden">
         <Icon
@@ -28,14 +28,6 @@
 </template>
 
 <script lang="ts" setup>
-const colorMode = useColorMode()
-
-const isDark = computed({
-  get() {
-    return colorMode.value === 'dark'
-  },
-  set() {
-    colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
-  },
-})
+const { colorMode, toggleColorMode } = useThemeTransition()
+const isDark = computed(() => colorMode.value === 'dark')
 </script>

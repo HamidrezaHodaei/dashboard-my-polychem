@@ -23,13 +23,16 @@ const ROUTE_NAVIGATION_KEYS: Record<string, string | string[]> = {
   '/procurement/logistics': ['logistics_companies', 'logistics_drivers'],
   // Purchase Reports (گزارشات خرید): procurement.purchase.read
   '/procurement/purchases': 'purchase_reports',
+  // Warehouse (request registration + status) and Finance (payments) are single pages of the purchase flow.
+  '/inventory': 'purchase_warehouse',
+  '/finance': 'purchase_finance',
   // Correspondence (مکاتبات): correspondence.mail.read, or an organizational unit the admin enabled.
   '/mail': 'correspondence',
 }
 
 // Sections with no backend permission to grant (placeholder modules) are admin-only -- the sidebar hides
 // them for everybody else, so typing the URL must not open them either.
-const ADMIN_ONLY_PREFIXES = ['/finance', '/inventory', '/customer-panel', '/website']
+const ADMIN_ONLY_PREFIXES = ['/customer-panel', '/website']
 
 function requiredNavigationKeyFor(path: string): string | string[] | null {
   // Longest-prefix match so `/tasks/analytics` doesn't fall through to

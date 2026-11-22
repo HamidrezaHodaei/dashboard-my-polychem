@@ -22,3 +22,20 @@ STEP = {
     "inquiries": "استعلام قیمت", "selection": "انتخاب تأمین‌کننده", "result": "نتیجه و تکمیل خرید",
 }
 EVENT_KIND = {"STEP": "ثبت مرحله", "STATUS": "تغییر وضعیت", "REFERENCE": "تأیید قیمت مبنا", "REVIEW": "وضعیت بررسی"}
+
+# ── item-based flow (flow.py) ────────────────────────────────────────
+FLOW_STATUS = {
+    "UNDER_REVIEW": "در حال بررسی", "SOURCING": "در حال استعلام و تأمین", "REFERRED_FINANCE": "ارجاع استعلام به مالی",
+    "FOLLOW_UP": "پیگیری پرداخت و حمل", "PARTIAL_DELIVERY": "تحویل داده‌شده – جزئی",
+    "COMPLETED": "تحویل داده‌شده – بسته", "RETURNED": "استرداد جهت اصلاح", "VOID": "ابطال",
+}
+ITEM_STATUS = {
+    "PENDING": "در انتظار بررسی", "INQUIRY": "در حال استعلام و تأمین", "AWAITING_APPROVAL": "منتظر تأیید مدیر",
+    "IN_FINANCE": "در انتظار پرداخت (مالی)", "PAID": "پرداخت‌شده", "SHIPPING": "در حال حمل",
+    "DELIVERED": "تحویل داده‌شده", "CANCELLED": "ابطال",
+}
+FLOW_PRIORITY = {"NORMAL": "عادی", "URGENT": "فوری", "EMERGENCY": "خیلی فوری"}
+SUPPLY_PLACE = {"LOCAL": "محلی", "NON_LOCAL": "غیرمحلی"}
+SUBJECT = {"ASSET": "دارایی", "GENERAL": "عمومی"}
+PAY_METHOD = {"CASH": "نقدی", "CHEQUE": "چکی"}
+SLA_UNIT = {"DAYS": "روز", "HOURS": "ساعت"}

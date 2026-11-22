@@ -255,6 +255,15 @@ EXTRA_PERMISSIONS: tuple[tuple[str, str, str], ...] = (
     ("procurement", "purchase", "approve"), ("procurement", "purchase", "export"),
     # manage_catalog = create / edit / delete the purchase product catalog (admin)
     ("procurement", "purchase", "manage_catalog"),
+    # item-based purchase flow (modules/purchases/flow.py): one permission per unit that takes part in it.
+    #   warehouse register requests, see their status, upload warehouse receipts / mark an item delivered
+    #   procure   procurement cartable: statuses, local / non-local, quotations, shipping, delivery
+    #   manager   approve / return the quotation of each item (then it goes to finance)
+    #   finance   record cash / cheque payments and hand the request back to procurement
+    #   settings  pick lists of the request form + allowed delivery time per priority (system admin)
+    ("procurement", "purchase", "warehouse"), ("procurement", "purchase", "procure"),
+    ("procurement", "purchase", "manager"), ("procurement", "purchase", "finance"),
+    ("procurement", "purchase", "settings"),
     ("logistics", "company", "export"), ("logistics", "driver", "export"),
     ("crm", "sale", "export"), ("crm", "sale", "print"),
     ("crm", "request_sample", "approve"), ("crm", "request_sample", "reject"),
@@ -326,7 +335,8 @@ MATRIX_MODULES: tuple[MatrixModule, ...] = (
     MatrixModule("website.page", "Website"),
     MatrixModule("reports.report", "Reports"),
     MatrixModule("procurement.supplier", "Suppliers", ("review", "export")),
-    MatrixModule("procurement.purchase", "Purchase Reports", ("approve", "export", "manage_catalog")),
+    MatrixModule("procurement.purchase", "Purchase Reports",
+                 ("approve", "export", "manage_catalog", "warehouse", "procure", "manager", "finance", "settings")),
     MatrixModule("logistics.company", "Transport Companies", ("review", "export")),
     MatrixModule("logistics.driver", "Drivers", ("review", "export")),
     MatrixModule("correspondence.mail", "مکاتبات"),

@@ -220,7 +220,7 @@ export function stageOf(status: PurchaseStatus): number {
   }
 }
 
-export interface CatalogProduct { id: number, name: string, code: string | null, category_id: number | null, category_name: string | null, is_active: boolean, used_count?: number }
+export interface CatalogProduct { id: number, name: string, code: string | null, category_id: number | null, category_name: string | null, is_active: boolean, used_count?: number, unit?: string | null }
 
 export const reviewTone: Record<ReviewStatus, string> = {
   PENDING_REVIEW: 'bg-amber-100 text-amber-800',

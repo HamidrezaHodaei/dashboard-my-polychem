@@ -101,13 +101,13 @@ const approvals = [
     title: 'Purchase order #PO-1048',
     meta: 'Procurement · 2 hours ago',
     icon: 'lucide:receipt-text',
-    to: '/finance/purchases',
+    to: '/finance',
   },
   {
     title: 'Payment batch #PAY-238',
     meta: 'Finance · 4 hours ago',
     icon: 'lucide:banknote',
-    to: '/finance/payments',
+    to: '/finance',
   },
   {
     title: 'New website page',
@@ -124,7 +124,7 @@ const alerts = [
     icon: 'lucide:package-open',
     count: '4 items',
     tone: 'danger',
-    to: '/inventory/stock',
+    to: '/inventory',
   },
   {
     title: 'Overdue receivables',
@@ -132,7 +132,7 @@ const alerts = [
     icon: 'lucide:clock-3',
     count: '7 invoices',
     tone: 'danger',
-    to: '/finance/overdue',
+    to: '/finance',
   },
   {
     title: 'Production update',

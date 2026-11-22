@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./dark-compat.css";
+@import "./palettes.css";
 @custom-variant dark (&:is(.dark *));
 @custom-variant container-fluid (&:is(.container-fluid *));
 @custom-variant container-centered (&:is(.container-centered *));
@@ -95,6 +97,41 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
+}
+
+/* ── Form controls in both themes (one place for every <input>, <select>, <textarea>, date picker) ──
+   `color-scheme` makes the browser draw the native pieces (open <select> list, arrow, calendar icon,
+   scrollbars, autofill) in the right theme; the rest are tokens, so nothing here is page-specific. */
+@layer base {
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
+
+  input, textarea, select { color: var(--foreground); }
+  ::placeholder { color: var(--muted-foreground); opacity: 1; }
+
+  /* the open native list: popover surface, readable text, clear selected / disabled options */
+  select option, select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  select option:checked { background-color: var(--accent); color: var(--accent-foreground); }
+  select option:disabled { color: var(--muted-foreground); }
+
+  /* keyboard focus for plain controls that do not bring their own ring */
+  input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--ring) 70%, transparent);
+    outline-offset: 1px;
+  }
+
+  /* browser autofill paints a pale box with dark text in dark mode */
+  input:-webkit-autofill, textarea:-webkit-autofill, select:-webkit-autofill {
+    -webkit-text-fill-color: var(--foreground);
+    caret-color: var(--foreground);
+    box-shadow: 0 0 0 1000px var(--card) inset;
+    transition: background-color 9999s ease-out;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.7; cursor: pointer; }
 }
 
 @layer components {
@@ -414,4 +451,17 @@
 .rs-rtl textarea::placeholder {
   direction: rtl;
   text-align: right;
+}
+
+/* ── Theme change: circular reveal from the click point (see composables/useThemeTransition.ts) ── */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(root) { z-index: 0; }
+::view-transition-new(root) { z-index: 1; animation: theme-reveal 0.45s ease-in-out forwards; }
+@keyframes theme-reveal {
+  from { clip-path: circle(0% at var(--x, 50%) var(--y, 50%)); opacity: 0.7; }
+  to   { clip-path: circle(150% at var(--x, 50%) var(--y, 50%)); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }

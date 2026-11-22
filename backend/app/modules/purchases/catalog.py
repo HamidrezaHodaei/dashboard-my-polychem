@@ -39,7 +39,7 @@ def _clean_code(code: str | None) -> str | None:
 
 
 def _dict(p: PurchaseProduct, category_name: str | None, used: int | None = None) -> dict:
-    out = {"id": p.id, "name": p.name, "code": p.code, "category_id": p.category_id,
+    out = {"id": p.id, "name": p.name, "code": p.code, "unit": p.unit, "category_id": p.category_id,
            "category_name": category_name, "is_active": p.is_active}
     if used is not None:
         out["used_count"] = used
@@ -52,7 +52,7 @@ def _category_names() -> dict[int, str]:
 
 def list_products(actor: User, *, q: str | None, category_id: int | None, page: int | None, per_page: int,
                   include_inactive: bool = False) -> tuple[list[dict], int]:
-    S.require(actor, "read")
+    S.require_any(actor, S.READERS)
     admin = S.can(actor, "manage_catalog")
     stmt = select(PurchaseProduct)
     if not (include_inactive and admin):
@@ -89,6 +89,13 @@ def _check_unique(name: str, code: str | None, exclude_id: int | None) -> None:
             raise InvalidInputError("این کد کالا برای کالای دیگری ثبت شده است.", "code")
 
 
+def _clean_unit(unit: str | None) -> str | None:
+    unit = " ".join((unit or "").split())
+    if len(unit) > 40:
+        raise InvalidInputError("واحد اندازه‌گیری حداکثر ۴۰ نویسه است.", "unit")
+    return unit or None
+
+
 def _category_ok(category_id: int | None) -> None:
     if category_id is not None and db.session.get(SupplierCategory, category_id) is None:
         raise InvalidInputError("گروه کالایی معتبر نیست.", "category_id")
@@ -101,7 +108,7 @@ def create_product(actor: User, body: ProductIn, ip: str | None = None) -> dict:
     code = _clean_code(body.code)
     _category_ok(body.category_id)
     _check_unique(name, code, None)
-    p = PurchaseProduct(name=name, code=code, category_id=body.category_id,
+    p = PurchaseProduct(name=name, code=code, category_id=body.category_id, unit=_clean_unit(body.unit),
                         is_active=True if body.is_active is None else body.is_active, created_by_user_id=actor.id)
     db.session.add(p)
     db.session.flush()
@@ -117,7 +124,7 @@ def update_product(actor: User, product_id: int, body: ProductIn, ip: str | None
     if p is None:
         raise NotFoundError("کالا پیدا نشد.")
     data = body.model_dump(exclude_unset=True)
-    before = {"name": p.name, "code": p.code, "category_id": p.category_id, "is_active": p.is_active}
+    before = {"name": p.name, "code": p.code, "unit": p.unit, "category_id": p.category_id, "is_active": p.is_active}
     name = (data["name"] or "").strip() if "name" in data else p.name
     S._need(name, "نام کالا را وارد کنید.", "name")
     code = _clean_code(data["code"]) if "code" in data else p.code
@@ -126,10 +133,12 @@ def update_product(actor: User, product_id: int, body: ProductIn, ip: str | None
         p.category_id = data["category_id"]
     _check_unique(name, code, p.id)
     p.name, p.code = name, code
+    if "unit" in data:
+        p.unit = _clean_unit(data["unit"])
     if data.get("is_active") is not None:
         p.is_active = data["is_active"]
     write_audit_log(user_id=actor.id, action="update", module=S.MODULE, entity_type="purchase_product", entity_id=p.id,
-                    metadata={"before": before, "after": {"name": p.name, "code": p.code, "category_id": p.category_id,
+                    metadata={"before": before, "after": {"name": p.name, "code": p.code, "unit": p.unit, "category_id": p.category_id,
                                                            "is_active": p.is_active}}, ip_address=ip)
     db.session.commit()
     return _dict(p, _category_names().get(p.category_id))
@@ -150,7 +159,7 @@ def delete_product(actor: User, product_id: int, ip: str | None = None) -> None:
 
 def search_units(actor: User, q: str | None, limit: int = 30) -> list[str]:
     """Every unit ever typed on an item (most used first). Purely suggestions: a new unit is always allowed."""
-    S.require(actor, "read")
+    S.require_any(actor, S.READERS)
     stmt = select(PurchaseItem.unit).where(PurchaseItem.unit != "")
     if q and q.strip():
         stmt = stmt.where(PurchaseItem.unit.like(_like(q.strip()[:40]), escape="\\"))
