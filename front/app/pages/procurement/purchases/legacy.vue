@@ -1,11 +1,10 @@
 <template>
   <ContainerWrapper class="space-y-6 py-6 md:py-8">
+    <NuxtLink to="/procurement/purchases" class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><Icon name="lucide:chevron-right" class="size-4" />گزارشات خرید</NuxtLink>
     <AccessPageHeader
-      title="سوابق نسخهٔ قبلی و خریدهای مستقیم"
-      description="درخواست‌های ثبت‌شده با گردش کار قبلی و خریدهای مستقیم؛ درخواست‌های جدید از بخش انبار ثبت می‌شوند."
+      title="سوابق قبلی و خریدهای مستقیم"
+      description="سوابق گزارش‌های خرید نسخهٔ قبلی و خریدهای مستقیم. ثبت خرید جدید از صفحهٔ گزارشات خرید انجام می‌شود."
       section="تدارکات و لجستیک"
-      :action-label="store.can('create') ? 'ثبت خرید جدید' : undefined"
-      @action="navigateTo('/procurement/purchases/new')"
     >
       <template #actions>
         <Button v-if="store.can('manage_catalog')" variant="outline" size="sm" class="gap-2" @click="navigateTo('/procurement/purchases/products')">

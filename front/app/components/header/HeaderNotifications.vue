@@ -160,40 +160,12 @@ function toggleExpanded(n: AppNotification) {
   if (!next.delete(n.id)) next.add(n.id)
   expanded.value = next
 }
-const iconColor = (type: string) => (
-  type === 'TASK_OVERDUE' || type === 'CUSTOMER_FOLLOWUP_OVERDUE'
-    ? 'text-destructive'
-    : type === 'TASK_DUE_SOON' || type === 'CUSTOMER_FOLLOWUP_DUE' ? 'text-amber-500' : 'text-primary'
-)
+const iconColor = notificationIconColor
 
 onMounted(() => store.start())
 onBeforeUnmount(() => store.stop())
 
-const iconFor = (type: string) => ({
-  MAIL: 'lucide:mail',
-  TASK_ASSIGNED: 'lucide:clipboard-list',
-  TASK_REFERRED: 'lucide:corner-up-left',
-  TASK_MENTION: 'lucide:at-sign',
-  TASK_DUE_SOON: 'lucide:alarm-clock',
-  TASK_OVERDUE: 'lucide:alarm-clock-off',
-  REVIEW_RESULT: 'lucide:badge-check',
-  REVIEW_RESUBMITTED: 'lucide:rotate-ccw',
-  CHANGE_REQUEST: 'lucide:file-pen-line',
-  REVIEW_REQUEST: 'lucide:inbox',
-  SAMPLE_SUBMITTED: 'lucide:flask-conical',
-  SAMPLE_APPROVED: 'lucide:check-circle-2',
-  SAMPLE_REJECTED: 'lucide:x-circle',
-  SAMPLE_ON_HOLD: 'lucide:pause-circle',
-  SAMPLE_DISPATCHED: 'lucide:truck',
-  SAMPLE_DELIVERED: 'lucide:package-check',
-  SAMPLE_REMIND_SHIP: 'lucide:package-open',
-  SAMPLE_REMIND_DELIVER: 'lucide:truck',
-  SAMPLE_REMIND_FOLLOWUP: 'lucide:phone-call',
-  SAMPLE_FOLLOWUP_DUE: 'lucide:calendar-clock',
-  SAMPLE_FEEDBACK: 'lucide:message-circle-heart',
-  CUSTOMER_FOLLOWUP_DUE: 'lucide:phone-call',
-  CUSTOMER_FOLLOWUP_OVERDUE: 'lucide:phone-missed',
-} as Record<string, string>)[type] ?? 'lucide:bell'
+const iconFor = notificationIcon
 
 async function openNotification(n: AppNotification) {
   open.value = false

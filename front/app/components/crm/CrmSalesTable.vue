@@ -5,7 +5,7 @@
         <TableRow>
           <TableHead>تاریخ</TableHead><TableHead>مشتری</TableHead><TableHead>کالا</TableHead><TableHead>مقدار</TableHead><TableHead>مبلغ</TableHead><TableHead>وضعیت</TableHead><TableHead
             v-if="showActions"
-            class="text-right"
+            class="col-actions"
           >
             عملیات
           </TableHead>
@@ -27,7 +27,7 @@
             </Badge>
           </TableCell><TableCell
             v-if="showActions"
-            class="text-right"
+            class="col-actions"
           >
             <Button
               variant="ghost"

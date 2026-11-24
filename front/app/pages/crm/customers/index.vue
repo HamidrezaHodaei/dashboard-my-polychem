@@ -173,7 +173,7 @@
               <TableHead>وضعیت تجاری</TableHead>
               <TableHead>مسئول پیگیری</TableHead>
               <TableHead>پیگیری بعدی</TableHead>
-              <TableHead class="text-right">عملیات</TableHead>
+              <TableHead class="col-actions">عملیات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -265,56 +265,19 @@
                 >{{ formatJalali(c.next_follow_up_date) }}</span>
                 <span v-else class="text-xs text-muted-foreground">—</span>
               </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" title="مشاهده جزئیات" aria-label="مشاهده جزئیات" @click="openView(c)">
-                    <Icon name="lucide:eye" class="size-4" />
-                  </Button>
-                  <Button
-                    v-if="crmAccess.canReadSales.value"
-                    variant="ghost"
-                    size="icon"
-                    title="فروش‌های این مشتری"
-                    aria-label="فروش‌های این مشتری"
-                    @click="navigateTo({ path: '/crm/sales', query: { customer_id: c.id } })"
-                  >
-                    <Icon name="lucide:shopping-cart" class="size-4" />
-                  </Button>
-                  <Button
-                    v-if="c.my_actions?.can_review && requestReviewActionsFor(c.review_status).length"
-                    variant="ghost" size="icon" title="بررسی درخواست" aria-label="بررسی درخواست" @click="openReview(c)"
-                  >
-                    <Icon name="lucide:shield-check" class="size-4" />
-                  </Button>
-                  <Button
-                    v-if="c.my_actions?.can_finalize"
-                    variant="ghost" size="icon"
-                    :title="c.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد (ارسال برای بررسی)' : 'ثبت نهایی'"
-                    :aria-label="c.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد' : 'ثبت نهایی'"
-                    @click="finalizeRow(c)"
-                  >
-                    <Icon name="lucide:send" class="size-4" />
-                  </Button>
-                  <Button
-                    v-if="c.my_actions?.can_request_change"
-                    variant="ghost" size="icon" title="درخواست تغییر اطلاعات" aria-label="درخواست تغییر اطلاعات" @click="openChangeRequest(c)"
-                  >
-                    <Icon name="lucide:file-pen-line" class="size-4" />
-                  </Button>
-                  <Button v-if="c.my_actions?.can_edit ?? store.canUpdate" variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openEdit(c)">
-                    <Icon name="lucide:pencil" class="size-4" />
-                  </Button>
-                  <Button
-                    v-if="store.canDelete"
-                    variant="ghost"
-                    size="icon"
-                    class="text-destructive"
-                    title="حذف"
-                    aria-label="حذف"
-                    @click="confirmDelete(c)"
-                  >
-                    <Icon name="lucide:trash-2" class="size-4" />
-                  </Button>
+              <TableCell class="col-actions">
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهده جزئیات', group: 0, onSelect: () => openView(c) },
+                      { key: 'sales', label: 'فروش\u200cهای این مشتری', group: 0, show: !!(crmAccess.canReadSales.value), onSelect: () => navigateTo({ path: '/crm/sales', query: { customer_id: c.id } }) },
+                      { key: 'review', label: 'بررسی درخواست', group: 1, show: !!(c.my_actions?.can_review && requestReviewActionsFor(c.review_status).length), onSelect: () => openReview(c) },
+                      { key: 'finalize', label: c.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد (ارسال برای بررسی)' : 'ثبت نهایی', group: 1, show: !!(c.my_actions?.can_finalize), onSelect: () => finalizeRow(c) },
+                      { key: 'change', label: 'درخواست تغییر اطلاعات', group: 1, show: !!(c.my_actions?.can_request_change), onSelect: () => openChangeRequest(c) },
+                      { key: 'edit', label: 'ویرایش', group: 2, show: !!(c.my_actions?.can_edit ?? store.canUpdate), onSelect: () => openEdit(c) },
+                      { key: 'delete', label: 'حذف', show: !!(store.canDelete), destructive: true, onSelect: () => confirmDelete(c) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>

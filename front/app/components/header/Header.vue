@@ -10,7 +10,7 @@
       container="fluid"
       class="py-2 flex items-center justify-between h-(--header-height)"
     >
-      <div class="flex items-center gap-x-3">
+      <div class="flex min-w-0 items-center gap-x-1 sm:gap-x-3">
         <div>
           <Button
             variant="ghost"
@@ -28,11 +28,11 @@
         <HeaderSearch />
       </div>
 
-      <div class="flex items-center gap-x-3">
+      <div class="flex items-center gap-x-1 sm:gap-x-3">
         <HeaderNotifications />
         <SettingsAppearanceSheet />
         <ColorModeButton />
-        <div class="h-6">
+        <div class="hidden h-6 sm:block">
           <Separator
             :orientation="'vertical'"
           />

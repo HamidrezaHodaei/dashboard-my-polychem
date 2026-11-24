@@ -7,7 +7,10 @@ fetched -- the header polls it -- so they need no scheduler. All times are Tehra
 """
 from datetime import datetime, time, timedelta, timezone
 
+from sqlalchemy import and_, not_, or_
+
 from app.extensions import db
+from app.modules.notifications import catalog
 from app.modules.notifications.models import Notification
 from app.modules.tasks.models import Task, TaskAssignment, TaskStatus
 from app.utils.jalali import TEHRAN, tehran_now
@@ -92,7 +95,7 @@ def generate_deadline_notifications(user_id: int) -> int:
 
 def _dump(n: Notification) -> dict:
     return {
-        "id": n.id, "type": n.type, "title": n.title, "body": n.body, "link": n.link, "task_id": n.task_id,
+        "id": n.id, "type": n.type, "category": catalog.category_of(n.type), "title": n.title, "body": n.body, "link": n.link, "task_id": n.task_id,
         "is_read": n.read_at is not None,
         "created_at": (n.created_at if n.created_at.tzinfo else n.created_at.replace(tzinfo=timezone.utc)).isoformat(),
     }
@@ -114,28 +117,62 @@ def _accessible_task_ids(user_id: int, task_ids: set[int]) -> set[int]:
     return {t.id for t in tasks if auth.in_units(t)}
 
 
-def list_for(user_id: int, *, limit: int = 30, only_unread: bool = False, before_id: int | None = None) -> dict:
-    """Newest first. `before_id` pages backwards (the "all notifications" page passes the id of
-    the last item it already has); `has_more` tells the client whether another page exists."""
+def run_generators(user_id: int) -> int:
+    """Create the user's time-based notifications (task deadlines, sample reminders, customer follow-ups).
+    Called when the bell lists notifications AND by the push cron, so a reminder exists -- and reaches the
+    phone -- even if nobody has the panel open. Each generator is isolated: a failure never breaks the caller."""
+    created = 0
     try:
-        generate_deadline_notifications(user_id)
+        created += generate_deadline_notifications(user_id) or 0
     except Exception:  # a warning must never break the bell
         db.session.rollback()
     try:
         from app.modules.request_samples import reminders  # local import: request_samples imports this module
 
-        reminders.generate_for(user_id)
+        created += reminders.generate_for(user_id) or 0
     except Exception:  # same rule for the sample reminders
         db.session.rollback()
     try:
         from app.modules.customers import reminders as customer_reminders  # local import: avoids a cycle
 
-        customer_reminders.generate_for(user_id)
+        created += customer_reminders.generate_for(user_id) or 0
     except Exception:  # same rule for the customer follow-up reminders
         db.session.rollback()
+    return created
+
+
+def _category_clause(category: str):
+    """SQL condition: notifications whose `type` belongs to `category` (explicit map first, then prefix rules)."""
+    explicit_here = catalog.types_in(category)
+    explicit_elsewhere = [t for t, c in catalog.TYPE_CATEGORY.items() if c != category]
+    prefix_here = [p for p, c in catalog.PREFIX_CATEGORY if c == category]
+    if category == "other":
+        any_prefix = [Notification.type.like(f"{p}%") for p, _ in catalog.PREFIX_CATEGORY]
+        return and_(Notification.type.notin_(list(catalog.TYPE_CATEGORY)), not_(or_(*any_prefix)))
+    parts = [Notification.type.in_(explicit_here)] if explicit_here else []
+    parts += [and_(Notification.type.like(f"{p}%"), Notification.type.notin_(explicit_elsewhere)) for p in prefix_here]
+    return or_(*parts) if parts else Notification.id < 0
+
+
+def _like(text: str) -> str:
+    return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def list_for(user_id: int, *, limit: int = 30, only_unread: bool = False, before_id: int | None = None,
+             q: str | None = None, category: str | None = None, read: str | None = None) -> dict:
+    """Newest first. `before_id` pages backwards (the "all notifications" page passes the id of
+    the last item it already has); `has_more` tells the client whether another page exists."""
+    run_generators(user_id)
     query = db.session.query(Notification).filter(Notification.user_id == user_id)
-    if only_unread:
+    if only_unread or read == "unread":
         query = query.filter(Notification.read_at.is_(None))
+    elif read == "read":
+        query = query.filter(Notification.read_at.isnot(None))
+    if category and category in catalog.CATEGORY_KEYS:
+        query = query.filter(_category_clause(category))
+    if q and q.strip():
+        term = _like(q.strip()[:80])
+        query = query.filter(or_(Notification.title.like(term, escape="\\"), Notification.body.like(term, escape="\\")))
     if before_id:
         query = query.filter(Notification.id < before_id)
     rows = query.order_by(Notification.id.desc()).limit(limit + 1).all()

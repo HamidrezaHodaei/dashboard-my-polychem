@@ -50,7 +50,9 @@ from app.modules.logistics.models import (  # noqa: F401
     LogisticsFile,
     LogisticsServiceArea,
 )
-from app.modules.notifications.models import Notification  # noqa: F401
+from app.modules.notifications.models import (  # noqa: F401
+    Notification, NotificationPreference, NotificationSetting, PushDelivery, PushSubscription,
+)
 from app.modules.mail.models import MailAttachment, MailMessage, MailParticipant, MailUnitAccess  # noqa: F401
 
 __all__ = [

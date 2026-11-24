@@ -30,6 +30,7 @@ from app.core.audit_logs.services import write_audit_log
 from app.core.users.models import User
 from app.extensions import db
 from app.modules.purchases import labels as L
+from app.modules.purchases import notifications as purchase_notifications
 from app.modules.purchases import services as S
 from app.modules.purchases.flow_schemas import (
     FinanceReturnIn, FlowItemIn, FlowRequestIn, ItemStatusIn, ManagerDecisionIn, OptionIn, PaymentIn, QuoteIn, SlaIn,
@@ -95,6 +96,8 @@ def _ev(req: PurchaseRequest, actor: User, *, item: PurchaseItem | None = None, 
         request_id=req.id, kind=kind, item_id=item.id if item is not None else None,
         from_status=getattr(from_status, "value", from_status), to_status=getattr(to_status, "value", to_status),
         note=note, user_id=actor.id, user_name=(actor.full_name or "")[:200] or None, created_at=_now()))
+    # who needs to hear about this step (bell + push); see purchases/notifications.py
+    purchase_notifications.on_event(req, actor, item=item, kind=kind, from_status=from_status, to_status=to_status, note=note)
 
 
 def _audit(actor: User, req: PurchaseRequest, action: str, meta: dict | None, ip: str | None) -> None:

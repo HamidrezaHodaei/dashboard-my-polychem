@@ -49,11 +49,6 @@
               :class="optionClass(colorMode.preference === m.value)"
               @click="setColorMode(m.value, $event)"
             >
-              <Icon
-                :name="m.icon"
-                class="size-4"
-                aria-hidden="true"
-              />
               {{ m.label }}
             </button>
           </div>
@@ -199,9 +194,9 @@ const { palette, sidebarVariant, contentWidth, setPalette, setSidebarVariant, se
   = useAppearance()
 
 const modes = [
-  { label: 'سیستم', value: 'system', icon: 'lucide:monitor' },
-  { label: 'روشن', value: 'light', icon: 'lucide:sun' },
-  { label: 'تاریک', value: 'dark', icon: 'lucide:moon-star' },
+  { label: 'سیستم', value: 'system' },
+  { label: 'روشن', value: 'light' },
+  { label: 'تاریک', value: 'dark' },
 ] as const
 
 const swatch = (p: typeof PALETTES[number]) => (colorMode.value === 'dark' ? p.dark : p.light)

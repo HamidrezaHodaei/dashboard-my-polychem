@@ -144,7 +144,7 @@
             <TableHead>چه کسی</TableHead>
             <TableHead>می‌تواند وظایف را به چه کسی واگذار کند</TableHead>
             <TableHead>عمل</TableHead>
-            <TableHead v-if="canManage" class="text-right">
+            <TableHead v-if="canManage" class="col-actions">
               عملیات
             </TableHead>
           </TableRow>

@@ -44,11 +44,6 @@
               <NuxtLink
                 :to="'/settings'"
               >
-                <Icon
-                  name="lucide:settings"
-                  class="text-base size-4"
-                  aria-hidden="true"
-                />
                 تنظیمات
               </NuxtLink>
             </DropdownMenuItem>
@@ -56,11 +51,6 @@
               <NuxtLink
                 :to="'/settings/security'"
               >
-                <Icon
-                  name="lucide:lock"
-                  class="text-base size-4"
-                  aria-hidden="true"
-                />
                 امنیت
               </NuxtLink>
             </DropdownMenuItem>
@@ -68,11 +58,6 @@
               <NuxtLink
                 :to="'/settings/notifications'"
               >
-                <Icon
-                  name="lucide:bell"
-                  class="text-base size-4"
-                  aria-hidden="true"
-                />
                 اعلان‌ها
               </NuxtLink>
             </DropdownMenuItem>
@@ -82,11 +67,6 @@
             variant="destructive"
             @click="signOut"
           >
-            <Icon
-              name="lucide:log-out"
-              class="text-base size-4"
-              aria-hidden="true"
-            />
             خروج از حساب
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -87,6 +87,29 @@ class Config:
     # Correspondence attachments: per-file limit (falls back to MAX_UPLOAD_MB when unset / 0).
     MAIL_MAX_ATTACHMENT_MB = int(os.environ.get("MAIL_MAX_ATTACHMENT_MB", "0") or 0)
 
+    # --- Web Push (notifications reach the phone / desktop even when the panel is closed) ---
+    # Generate the pair once with `flask --app wsgi push-generate-keys` and keep it in the environment, never
+    # in the repository. Changing the PUBLIC key later invalidates every device registration.
+    VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+    VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+    VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "")  # mailto:admin@your-domain or https://your-domain
+    # Send from a background thread after the response is out (a hosting worker is not killed mid-send);
+    # "false" sends inline -- used by the tests and the cron command.
+    PUSH_ASYNC = os.environ.get("PUSH_ASYNC", "true").lower() == "true"
+    PUSH_TTL_SECONDS = int(os.environ.get("PUSH_TTL_SECONDS", "86400"))
+    PUSH_MAX_ATTEMPTS = int(os.environ.get("PUSH_MAX_ATTEMPTS", "5"))
+    # The server POSTs to the endpoint URL a browser hands us, so only real push services are accepted
+    # (SSRF protection). Comma-separated host suffixes; override only if a new vendor appears.
+    PUSH_ENDPOINT_ALLOWED_HOSTS = [
+        h.strip().lower() for h in os.environ.get(
+            "PUSH_ENDPOINT_ALLOWED_HOSTS",
+            "fcm.googleapis.com,android.googleapis.com,push.services.mozilla.com,push.apple.com,"
+            "notify.windows.com,wns.windows.com",
+        ).split(",") if h.strip()
+    ]
+    # Secret for POST /api/push/cron (for hosts where only an HTTP cron is available). Empty = endpoint disabled.
+    PUSH_CRON_TOKEN = os.environ.get("PUSH_CRON_TOKEN", "")
+
     # --- Misc ---
     JSON_SORT_KEYS = False
 
@@ -114,6 +137,7 @@ class TestingConfig(Config):
         "TEST_DATABASE_URL", "sqlite:///:memory:"
     )
     RATELIMIT_ENABLED = False  # keep tests deterministic, not rate-limit-sensitive
+    PUSH_ASYNC = False  # deterministic: deliveries are sent inline
 
 
 class ProductionConfig(Config):

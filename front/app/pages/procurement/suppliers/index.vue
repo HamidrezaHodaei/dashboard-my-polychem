@@ -186,7 +186,7 @@
               <TableHead>وضعیت درخواست</TableHead>
               <TableHead>وضعیت</TableHead>
               <TableHead>کیفیت</TableHead>
-              <TableHead class="text-right">
+              <TableHead class="col-actions">
                 عملیات
               </TableHead>
             </TableRow>
@@ -357,86 +357,18 @@
                   </SelectContent>
                 </Select>
               </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="مشاهده جزئیات"
-                    aria-label="مشاهده جزئیات"
-                    @click="openView(s)"
-                  >
-                    <Icon
-                      name="lucide:eye"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    v-if="s.my_actions?.can_review && requestReviewActionsFor(s.review_status).length"
-                    variant="ghost"
-                    size="icon"
-                    title="بررسی درخواست"
-                    aria-label="بررسی درخواست"
-                    @click="openReview(s)"
-                  >
-                    <Icon
-                      name="lucide:shield-check"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    v-if="s.my_actions?.can_finalize"
-                    variant="ghost"
-                    size="icon"
-                    :title="s.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد (ارسال برای بررسی)' : 'ثبت نهایی'"
-                    :aria-label="s.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد' : 'ثبت نهایی'"
-                    @click="finalizeRow(s)"
-                  >
-                    <Icon
-                      name="lucide:send"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    v-if="s.my_actions?.can_request_change"
-                    variant="ghost"
-                    size="icon"
-                    title="درخواست تغییر اطلاعات"
-                    aria-label="درخواست تغییر اطلاعات"
-                    @click="openChangeRequest(s)"
-                  >
-                    <Icon
-                      name="lucide:file-pen-line"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    v-if="s.my_actions?.can_edit"
-                    variant="ghost"
-                    size="icon"
-                    title="ویرایش"
-                    aria-label="ویرایش"
-                    @click="openEdit(s)"
-                  >
-                    <Icon
-                      name="lucide:pencil"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    v-if="store.canDelete"
-                    variant="ghost"
-                    size="icon"
-                    class="text-destructive"
-                    title="حذف"
-                    aria-label="حذف"
-                    @click="confirmDelete(s)"
-                  >
-                    <Icon
-                      name="lucide:trash-2"
-                      class="size-4"
-                    />
-                  </Button>
+              <TableCell class="col-actions">
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهده جزئیات', group: 0, onSelect: () => openView(s) },
+                      { key: 'review', label: 'بررسی درخواست', group: 1, show: !!(s.my_actions?.can_review && requestReviewActionsFor(s.review_status).length), onSelect: () => openReview(s) },
+                      { key: 'finalize', label: s.review_status === 'NEEDS_EDIT' ? 'ثبت مجدد (ارسال برای بررسی)' : 'ثبت نهایی', group: 1, show: !!(s.my_actions?.can_finalize), onSelect: () => finalizeRow(s) },
+                      { key: 'change', label: 'درخواست تغییر اطلاعات', group: 1, show: !!(s.my_actions?.can_request_change), onSelect: () => openChangeRequest(s) },
+                      { key: 'edit', label: 'ویرایش', group: 2, show: !!(s.my_actions?.can_edit), onSelect: () => openEdit(s) },
+                      { key: 'delete', label: 'حذف', show: !!(store.canDelete), destructive: true, onSelect: () => confirmDelete(s) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>

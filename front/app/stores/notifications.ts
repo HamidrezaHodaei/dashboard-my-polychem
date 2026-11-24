@@ -4,6 +4,7 @@ import { apiFetch } from '~/services/backendApi'
 export interface AppNotification {
   id: number
   type: string
+  category?: string
   title: string
   body: string | null
   link: string | null
@@ -151,11 +152,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
   }
 
   /** One page of the full history for the "all notifications" screen (does not touch the bell list). */
-  async function fetchPage(opts: { beforeId?: number | null, unreadOnly?: boolean, limit?: number } = {}) {
+  async function fetchPage(opts: {
+    beforeId?: number | null, unreadOnly?: boolean, limit?: number, q?: string, category?: string, read?: 'all' | 'read' | 'unread'
+  } = {}) {
     const data = await apiFetch<{
       items: AppNotification[], unread_count: number, has_more: boolean, next_before_id: number | null
     }>('/notifications', {
-      query: { limit: opts.limit ?? 30, unread: opts.unreadOnly ? 1 : undefined, before_id: opts.beforeId ?? undefined },
+      query: {
+        limit: opts.limit ?? 30, unread: opts.unreadOnly ? 1 : undefined, before_id: opts.beforeId ?? undefined,
+        q: opts.q?.trim() || undefined, category: opts.category || undefined, read: opts.read && opts.read !== 'all' ? opts.read : undefined,
+      },
     })
     unread.value = data.unread_count
     return data

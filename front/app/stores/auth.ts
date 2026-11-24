@@ -67,6 +67,8 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async logout() {
+      // Push first (it needs the access token): this browser must stop receiving this user's notifications.
+      if (import.meta.client) await detachCurrentDevice(this.user?.id)
       try {
         await apiFetch('/auth/logout', { method: 'POST' })
       }
@@ -80,6 +82,9 @@ export const useAuthStore = defineStore('auth', {
       this.navigation = []
       useTaskWorkspaceStore().reset()
       useNotificationsStore().reset()
+      // Installed app: ask the service worker to drop its runtime caches too (it holds nothing private;
+      // this is defence in depth). No-op in a normal tab or while the worker is not registered.
+      if (import.meta.client) navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_CACHES' })
     },
 
     /** Loads /api/me, /api/me/permissions, /api/me/navigation once an

@@ -230,8 +230,12 @@
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <p class="text-sm font-semibold">{{ METHOD_LABELS[f.method] }} · {{ fmtDate(f.followup_date) }}<span v-if="f.contact_person" class="font-normal text-muted-foreground"> · با {{ f.contact_person }}</span></p>
                 <div v-if="f.can_edit" class="flex gap-1">
-                  <Button variant="ghost" size="icon" class="size-7" title="ویرایش" aria-label="ویرایش" @click="openFollowUp(f)"><Icon name="lucide:pencil" class="size-3.5" /></Button>
-                  <Button variant="ghost" size="icon" class="size-7 text-destructive" title="حذف" aria-label="حذف" @click="removeFollowUp(f.id)"><Icon name="lucide:trash-2" class="size-3.5" /></Button>
+                  <RowActions
+                    :actions="[
+                      { key: 'edit', label: 'ویرایش', onSelect: () => openFollowUp(f) },
+                      { key: 'delete', label: 'حذف', destructive: true, onSelect: () => removeFollowUp(f.id) },
+                    ]"
+                  />
                 </div>
               </div>
               <p v-if="f.result" class="mt-2 whitespace-pre-line text-sm"><b>نتیجه: </b>{{ f.result }}</p>

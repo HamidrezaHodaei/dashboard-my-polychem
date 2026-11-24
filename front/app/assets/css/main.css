@@ -465,3 +465,46 @@
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
+
+/* ── Action column: the "عملیات" title and the three-dot button share one centred, narrow column ──
+   Header cell and body cell both carry `.col-actions`, so the title always sits exactly above the
+   button in RTL, whatever the table. */
+@layer components {
+  .col-actions {
+    width: 1%;
+    min-width: 4.5rem;
+    white-space: nowrap;
+    text-align: center;
+  }
+}
+
+/* ── Installed-app (PWA) behaviour ──
+   Safe areas keep content clear of notches / home indicators when the app runs edge to edge
+   (viewport-fit=cover, see nuxt.config.ts). The insets are 0 in a normal browser tab. */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    /* no pull-to-refresh / rubber-band bounce on the shell; inner scroll areas keep their own */
+    overscroll-behavior-y: none;
+  }
+  body {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    min-height: 100dvh;
+  }
+  /* sticky app header sits below the status bar / notch */
+  [data-slot="sidebar-inset"] > header {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  /* wide tables and code scroll inside their own box; the page itself never scrolls sideways */
+  html, body { max-width: 100%; overflow-x: clip; }
+  img, video, canvas, svg { max-width: 100%; }
+}
+
+/* In standalone mode there is no browser chrome to select text or open the context menu from,
+   so UI chrome is not text-selectable (content such as tables and forms stays selectable). */
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+  [data-slot="sidebar"], [data-slot="button"], nav { -webkit-user-select: none; user-select: none; }
+}

@@ -54,28 +54,12 @@
                 {{ item.code || item.category }}
               </p>
             </div><div class="flex shrink-0 gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                title="ویرایش"
-                @click="openEdit(item)"
-              >
-                <Icon
-                  name="lucide:pencil"
-                  class="size-4"
-                />
-              </Button><Button
-                variant="ghost"
-                size="icon"
-                title="حذف"
-                class="hover:text-destructive"
-                @click="remove(item)"
-              >
-                <Icon
-                  name="lucide:trash-2"
-                  class="size-4"
-                />
-              </Button>
+              <RowActions
+                :actions="[
+                  { key: 'edit', label: 'ویرایش', group: 0, onSelect: () => openEdit(item) },
+                  { key: 'delete', label: 'حذف', destructive: true, onSelect: () => remove(item) },
+                ]"
+              />
             </div>
           </div>
         </div><AccessEmptyState v-if="!currentItems.length" />

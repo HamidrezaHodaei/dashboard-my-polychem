@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffcc05">
+  <title>عدم اتصال | پلیکم</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#fff; --fg:#171717; --muted:#737373; --line:#e5e5e5; --brand:#ffcc05; --on-brand:#1a1a1a; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#000; --fg:#f5f5f5; --muted:#a3a3a3; --line:#292929; } }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; align-items: center; justify-content: center; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); background: var(--bg); color: var(--fg); font-family: 'Vazirmatn', 'IRANYekan', Tahoma, sans-serif; }
+    main { width: 100%; max-width: 420px; text-align: center; }
+    .mark { width: 56px; height: 56px; margin: 0 auto 24px; border-radius: 14px; background: var(--brand); display: flex; align-items: center; justify-content: center; }
+    .mark i { display: block; width: 11px; height: 30px; background: #fff; }
+    h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+    p { margin: 0 0 24px; color: var(--muted); line-height: 1.9; font-size: 14px; }
+    button { min-height: 44px; padding: 0 24px; border: 0; border-radius: 6px; background: var(--brand); color: var(--on-brand); font: inherit; font-weight: 500; cursor: pointer; }
+    button:hover { filter: brightness(.95); }
+    button:active { filter: brightness(.9); }
+    button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main role="alert">
+    <div class="mark" aria-hidden="true"><i></i></div>
+    <h1>اتصال به اینترنت برقرار نیست</h1>
+    <p>برای استفاده از سامانه به اینترنت نیاز است. اطلاعات شما روی این دستگاه ذخیره نمی‌شود. پس از اتصال دوباره، صفحه را بارگذاری کنید.</p>
+    <button type="button" onclick="location.reload()">تلاش دوباره</button>
+  </main>
+  <script>addEventListener('online', function () { location.reload() })</script>
+</body>
+</html>

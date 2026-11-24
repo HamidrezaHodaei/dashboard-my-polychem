@@ -43,7 +43,7 @@
       <Table v-else-if="organizations.length">
         <TableHeader>
           <TableRow>
-            <TableHead>سازمان</TableHead><TableHead>والد</TableHead><TableHead>وضعیت</TableHead><TableHead class="text-right">
+            <TableHead>سازمان</TableHead><TableHead>والد</TableHead><TableHead>وضعیت</TableHead><TableHead class="col-actions">
               عملیات
             </TableHead>
           </TableRow>
@@ -68,42 +68,15 @@
               {{ orgName(org.parent_organization_id) }}
             </TableCell>
             <TableCell><AccessStatusBadge :status="org.is_active ? 'active' : 'inactive'" /></TableCell>
-            <TableCell class="text-right">
-              <div class="flex justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="مدیریت دپارتمان‌ها"
-                  @click="openDepartments(org)"
-                >
-                  <Icon
-                    name="lucide:network"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="ویرایش"
-                  @click="openEdit(org)"
-                >
-                  <Icon
-                    name="lucide:pencil"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="حذف"
-                  class="text-destructive"
-                  @click="remove(org)"
-                >
-                  <Icon
-                    name="lucide:trash-2"
-                    class="size-4"
-                  />
-                </Button>
+            <TableCell class="col-actions">
+              <div class="flex justify-center">
+                <RowActions
+                  :actions="[
+                    { key: 'departments', label: 'مدیریت دپارتمان\u200cها', group: 0, onSelect: () => openDepartments(org) },
+                    { key: 'edit', label: 'ویرایش', group: 1, onSelect: () => openEdit(org) },
+                    { key: 'delete', label: 'حذف', destructive: true, onSelect: () => remove(org) },
+                  ]"
+                />
               </div>
             </TableCell>
           </TableRow>

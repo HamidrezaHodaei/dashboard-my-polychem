@@ -35,6 +35,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _init_extensions(app)
     _register_middleware(app)
     _register_blueprints(app)
+    _register_push(app)
 
     return app
 
@@ -87,6 +88,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.purchases.routes import bp as purchases_bp
     from app.modules.purchases.flow_routes import bp as purchase_flow_bp
     from app.modules.notifications.routes import bp as notifications_bp
+    from app.modules.notifications.push_routes import bp as push_bp
     from app.modules.mail.routes import bp as mail_bp
 
     app.register_blueprint(health_bp)
@@ -126,9 +128,18 @@ def _register_blueprints(app: Flask) -> None:
 
     # In-app notifications (header bell) — /api/notifications.
     app.register_blueprint(notifications_bp)
+    # Web Push: device registration, test send, cron entry point -- /api/push.
+    app.register_blueprint(push_bp)
 
     # Correspondence (مکاتبات) — organizational internal mail, /api/mail.
     app.register_blueprint(mail_bp)
 
     # Other business module blueprints (CRM, Finance, Warehouse, ...) are
     # added starting later phases — intentionally absent here.
+
+def _register_push(app: Flask) -> None:
+    """Web Push: commit hook -> outbox -> send (see app/modules/notifications/push.py) and the CLI commands."""
+    from app.modules.notifications import cli as push_cli, push
+
+    push.install_hooks(app)
+    push_cli.register(app)

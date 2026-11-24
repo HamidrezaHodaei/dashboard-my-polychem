@@ -606,7 +606,7 @@
               <Icon name="lucide:check-check" class="size-4" /> انجام شد
             </Button>
             <Button size="sm" variant="outline" class="gap-1.5" @click="bulkArchive">
-              <Icon name="lucide:archive" class="size-4" /> بایگانی
+              بایگانی
             </Button>
             <Button size="sm" variant="ghost" @click="selectedIds = new Set()">
               لغو انتخاب
@@ -730,21 +730,24 @@
                   aria-label="عملیات امور محوله"
                   @click.stop
                 >
-                  <Icon name="lucide:ellipsis" class="size-4" />
+                  <Icon name="lucide:ellipsis-vertical" class="size-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuContent
+                align="start"
+                dir="rtl"
+              >
                 <DropdownMenuItem @select="openTask(task.id)">
-                  <Icon name="lucide:external-link" class="size-4" /> باز کردن
+                  باز کردن
                 </DropdownMenuItem>
                 <DropdownMenuItem @select="advanceTask(task.id)">
-                  <Icon name="lucide:arrow-left-to-line" class="size-4" /> مرحله بعد
+                  مرحله بعد
                 </DropdownMenuItem>
                 <DropdownMenuItem @select="markDone(task.id)">
-                  <Icon name="lucide:check" class="size-4" /> {{ store.isAssignee(task) ? 'درخواست تأیید تکمیل' : 'انجام شد' }}
+                  {{ store.isAssignee(task) ? 'درخواست تأیید تکمیل' : 'انجام شد' }}
                 </DropdownMenuItem>
                 <DropdownMenuItem @select="archiveOne(task.id)">
-                  <Icon name="lucide:archive" class="size-4" /> بایگانی
+                  بایگانی
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

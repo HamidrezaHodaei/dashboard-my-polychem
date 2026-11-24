@@ -90,7 +90,7 @@
               <TableHead>سازمان / دپارتمان</TableHead>
               <TableHead>آخرین ورود</TableHead>
               <TableHead>وضعیت</TableHead>
-              <TableHead class="text-right">
+              <TableHead class="col-actions">
                 عملیات
               </TableHead>
             </TableRow>
@@ -134,87 +134,18 @@
                 {{ formatDate(user.last_login_at) }}
               </TableCell>
               <TableCell><AccessStatusBadge :status="user.is_active ? 'active' : 'inactive'" /></TableCell>
-              <TableCell>
-                <div class="flex justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="مشاهدهٔ جزئیات"
-                    as-child
-                  >
-                    <NuxtLink :to="`/access-management/users/${user.id}`">
-                      <Icon
-                        name="lucide:eye"
-                        class="size-4"
-                      />
-                    </NuxtLink>
-                  </Button>
-                  <Button
-                    v-if="auth.hasPermission('core.user.update')"
-                    variant="ghost"
-                    size="icon"
-                    title="ویرایش"
-                    @click="openEdit(user)"
-                  >
-                    <Icon
-                      name="lucide:pencil"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="مجوزها"
-                    as-child
-                  >
-                    <NuxtLink :to="`/access-management/users/${user.id}?tab=permissions`">
-                      <Icon
-                        name="lucide:key-round"
-                        class="size-4"
-                      />
-                    </NuxtLink>
-                  </Button>
-                  <Button
-                    v-if="auth.isAdmin || auth.hasPermission('core.user.update')"
-                    variant="ghost"
-                    size="icon"
-                    title="تغییر رمز عبور"
-                    as-child
-                  >
-                    <NuxtLink :to="`/access-management/users/${user.id}?password=1`">
-                      <Icon
-                        name="lucide:lock-keyhole"
-                        class="size-4"
-                      />
-                    </NuxtLink>
-                  </Button>
-                  <Button
-                    v-if="auth.hasPermission('core.user.update')"
-                    variant="ghost"
-                    size="icon"
-                    :title="user.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی'"
-                    :disabled="isSelf(user)"
-                    @click="askToggle(user)"
-                  >
-                    <Icon
-                      :name="user.is_active ? 'lucide:user-x' : 'lucide:user-check'"
-                      class="size-4"
-                    />
-                  </Button>
-                  <Button
-                    v-if="auth.hasPermission('core.user.delete')"
-                    variant="ghost"
-                    size="icon"
-                    title="حذف"
-                    class="text-destructive"
-                    :disabled="isSelf(user)"
-                    @click="askDelete(user)"
-                  >
-                    <Icon
-                      name="lucide:trash-2"
-                      class="size-4"
-                    />
-                  </Button>
+              <TableCell class="col-actions">
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهدهٔ جزئیات', group: 0, to: `/access-management/users/${user.id}` },
+                      { key: 'edit', label: 'ویرایش', group: 1, show: !!(auth.hasPermission('core.user.update')), onSelect: () => openEdit(user) },
+                      { key: 'perm', label: 'مجوزها', group: 2, to: `/access-management/users/${user.id}?tab=permissions` },
+                      { key: 'pwd', label: 'تغییر رمز عبور', group: 2, show: !!(auth.isAdmin || auth.hasPermission('core.user.update')), to: `/access-management/users/${user.id}?password=1` },
+                      { key: 'toggle', label: user.is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی', group: 3, show: !!(auth.hasPermission('core.user.update')), disabled: isSelf(user), onSelect: () => askToggle(user) },
+                      { key: 'delete', label: 'حذف', show: !!(auth.hasPermission('core.user.delete')), disabled: isSelf(user), destructive: true, onSelect: () => askDelete(user) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>

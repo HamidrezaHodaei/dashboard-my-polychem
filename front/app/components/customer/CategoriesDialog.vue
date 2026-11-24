@@ -162,63 +162,14 @@
                 v-if="editingId !== r.c.id"
                 class="flex shrink-0 gap-0.5"
               >
-                <Button
-                  v-if="!r.c.parent_id"
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  title="افزودن دسته‌بندی فرعی"
-                  aria-label="افزودن دسته‌بندی فرعی"
-                  :disabled="busy"
-                  @click="startAddSub(r.c)"
-                >
-                  <Icon
-                    name="lucide:corner-down-left"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  :title="r.c.is_active ? 'مخفی کردن از گزینه‌ها' : 'نمایش در گزینه‌ها'"
-                  :aria-label="r.c.is_active ? 'مخفی کردن از گزینه‌ها' : 'نمایش در گزینه‌ها'"
-                  :disabled="busy"
-                  @click="toggle(r.c)"
-                >
-                  <Icon
-                    :name="r.c.is_active ? 'lucide:eye' : 'lucide:eye-off'"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8"
-                  title="تغییر نام"
-                  aria-label="تغییر نام"
-                  :disabled="busy"
-                  @click="startRename(r.c)"
-                >
-                  <Icon
-                    name="lucide:pencil"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="size-8 text-destructive hover:text-destructive"
-                  title="حذف"
-                  aria-label="حذف"
-                  :disabled="busy"
-                  @click="remove(r.c, r.childCount)"
-                >
-                  <Icon
-                    name="lucide:trash-2"
-                    class="size-4"
-                  />
-                </Button>
+                <RowActions
+                  :actions="[
+                    { key: 'addsub', label: 'افزودن دسته\u200cبندی فرعی', group: 0, show: !!(!r.c.parent_id), disabled: busy, onSelect: () => startAddSub(r.c) },
+                    { key: 'toggle', label: r.c.is_active ? 'مخفی کردن از گزینه‌ها' : 'نمایش در گزینه‌ها', group: 1, disabled: busy, onSelect: () => toggle(r.c) },
+                    { key: 'rename', label: 'تغییر نام', group: 1, disabled: busy, onSelect: () => startRename(r.c) },
+                    { key: 'delete', label: 'حذف', disabled: busy, destructive: true, onSelect: () => remove(r.c, r.childCount) },
+                  ]"
+                />
               </div>
             </div>
           </li>

@@ -14,6 +14,7 @@
       />
       <WmsUiToastHost />
       <AppConfirmDialog />
+      <PwaStatus />
     </ClientOnly>
   </AppConfigProvider>
 </template>

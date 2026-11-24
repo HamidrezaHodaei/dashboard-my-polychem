@@ -112,7 +112,7 @@ function exportPdf() { notify.info('خروجی PDF آماده‌سازی شد.')
               <th class="px-4 py-3 font-medium">مانده</th>
               <th class="px-4 py-3 font-medium">آخرین تراکنش</th>
               <th class="px-4 py-3 font-medium">وضعیت</th>
-              <th class="px-4 py-3 font-medium">عملیات</th>
+              <th class="col-actions px-4 py-3 font-medium">عملیات</th>
             </tr>
           </thead>
           <tbody>
@@ -126,17 +126,15 @@ function exportPdf() { notify.info('خروجی PDF آماده‌سازی شد.')
               </td>
               <td class="num px-4 py-3 text-ink-700/70">{{ p.lastTransactionAt ? formatJalaliDate(p.lastTransactionAt) : '—' }}</td>
               <td class="px-4 py-3"><AppStatusBadge :label="p.isActive ? 'فعال' : 'غیرفعال'" :tone="p.isActive ? 'gain' : 'neutral'" /></td>
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-1">
-                  <NuxtLink :to="`/finance/parties/${p.id}`" class="rounded-lg p-1.5 text-ink-700/60 hover:bg-paper-100" title="مشاهده">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" stroke-linecap="round" stroke-linejoin="round" /><circle cx="12" cy="12" r="3" /></svg>
-                  </NuxtLink>
-                  <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-paper-100" title="ویرایش" @click="openEdit(p)">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                  </button>
-                  <button class="rounded-lg p-1.5 text-debt-600/70 hover:bg-debt-50" title="حذف" @click="handleDelete(p)">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                  </button>
+              <td class="col-actions px-4 py-3">
+                <div class="flex items-center justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهده', group: 0, to: `/finance/parties/${p.id}` },
+                      { key: 'edit', label: 'ویرایش', group: 1, onSelect: () => openEdit(p) },
+                      { key: 'delete', label: 'حذف', destructive: true, onSelect: () => handleDelete(p) },
+                    ]"
+                  />
                 </div>
               </td>
             </tr>

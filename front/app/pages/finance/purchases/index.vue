@@ -93,7 +93,7 @@ async function deleteExpense(e: Expense) {
                 <th class="px-4 py-3 font-medium">Paid</th>
                 <th class="px-4 py-3 font-medium">Remaining</th>
                 <th class="px-4 py-3 font-medium">Status</th>
-                <th class="px-4 py-3 font-medium">Actions</th>
+                <th class="col-actions px-4 py-3 font-medium">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -105,14 +105,14 @@ async function deleteExpense(e: Expense) {
                 <td class="num px-4 py-3 text-gain-700">{{ formatCurrency(p.paidAmount) }}</td>
                 <td class="num px-4 py-3 text-debt-600">{{ formatCurrency(p.remaining) }}</td>
                 <td class="px-4 py-3"><AppStatusBadge :label="statusLabel[p.status]" :tone="statusTone[p.status]" /></td>
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-1">
-                    <NuxtLink :to="`/finance/purchases/${p.id}`" class="rounded-lg p-1.5 text-ink-700/60 hover:bg-paper-100">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" stroke-linecap="round" stroke-linejoin="round" /><circle cx="12" cy="12" r="3" /></svg>
-                    </NuxtLink>
-                    <button class="rounded-lg p-1.5 text-debt-600/70 hover:bg-debt-50" @click="deletePurchase(p)">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                    </button>
+                <td class="col-actions px-4 py-3">
+                  <div class="flex items-center justify-center">
+                    <RowActions
+                      :actions="[
+                        { key: 'view', label: 'مشاهده جزئیات', to: `/finance/purchases/${p.id}` },
+                        { key: 'delete', label: 'حذف', destructive: true, onSelect: () => deletePurchase(p) },
+                      ]"
+                    />
                   </div>
                 </td>
               </tr>
@@ -137,7 +137,7 @@ async function deleteExpense(e: Expense) {
                 <th class="px-4 py-3 font-medium">Date</th>
                 <th class="px-4 py-3 font-medium">Amount</th>
                 <th class="px-4 py-3 font-medium">Payment method</th>
-                <th class="px-4 py-3 font-medium">Actions</th>
+                <th class="col-actions px-4 py-3 font-medium">عملیات</th>
               </tr>
             </thead>
             <tbody>
@@ -147,14 +147,14 @@ async function deleteExpense(e: Expense) {
                 <td class="num px-4 py-3 text-ink-700/70">{{ formatJalaliDate(e.date) }}</td>
                 <td class="num px-4 py-3 font-medium text-debt-600">{{ formatCurrency(e.amount) }}</td>
                 <td class="px-4 py-3 text-ink-700/70">{{ e.method }}</td>
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-1">
-                    <NuxtLink :to="`/finance/expenses/${e.id}`" class="rounded-lg p-1.5 text-ink-700/60 hover:bg-paper-100">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" stroke-linecap="round" stroke-linejoin="round" /><circle cx="12" cy="12" r="3" /></svg>
-                    </NuxtLink>
-                    <button class="rounded-lg p-1.5 text-debt-600/70 hover:bg-debt-50" @click="deleteExpense(e)">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                    </button>
+                <td class="col-actions px-4 py-3">
+                  <div class="flex items-center justify-center">
+                    <RowActions
+                      :actions="[
+                        { key: 'view', label: 'مشاهده جزئیات', to: `/finance/expenses/${e.id}` },
+                        { key: 'delete', label: 'حذف', destructive: true, onSelect: () => deleteExpense(e) },
+                      ]"
+                    />
                   </div>
                 </td>
               </tr>

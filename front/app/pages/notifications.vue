@@ -23,32 +23,74 @@
             as-child
           >
             <NuxtLink to="/settings/notifications">
-              <Icon
-                name="lucide:settings"
-                class="size-4"
-                aria-hidden="true"
-              />
               تنظیمات
             </NuxtLink>
           </Button>
         </div>
       </div>
 
-      <div class="mb-3 flex gap-2">
+      <!-- Push is the way notifications reach a closed app: offer it here, where the user is looking at them. -->
+      <div
+        v-if="push.canOffer.value"
+        class="mb-4 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p class="text-sm text-muted-foreground">
+          {{ push.needsInstall.value ? 'برای دریافت اعلان روی آیفون، ابتدا سامانه را به صفحه اصلی اضافه کنید.' : 'اعلان‌های فوری فعال نیست؛ با فعال‌سازی، حتی وقتی برنامه بسته است اعلان می‌گیرید.' }}
+        </p>
         <Button
           size="sm"
-          :variant="unreadOnly ? 'outline' : 'default'"
-          @click="setFilter(false)"
+          variant="outline"
+          as-child
         >
-          همه
+          <NuxtLink to="/settings/notifications">
+            فعال‌سازی
+          </NuxtLink>
         </Button>
-        <Button
-          size="sm"
-          :variant="unreadOnly ? 'default' : 'outline'"
-          @click="setFilter(true)"
+      </div>
+
+      <div class="mb-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Input
+          v-model="query"
+          type="search"
+          dir="rtl"
+          placeholder="جستجو در عنوان و متن اعلان‌ها"
+          aria-label="جستجو در اعلان‌ها"
+          autocomplete="off"
+        />
+        <NativeSelect
+          v-model="category"
+          dir="rtl"
+          class="w-full sm:w-48"
+          aria-label="دسته اعلان"
         >
-          خوانده‌نشده
-          <span v-if="store.unread > 0">({{ toPersianDigits(store.unread) }})</span>
+          <NativeSelectOption value="">
+            همه دسته‌ها
+          </NativeSelectOption>
+          <NativeSelectOption
+            v-for="c in NOTIFICATION_CATEGORIES"
+            :key="c.key"
+            :value="c.key"
+          >
+            {{ c.label }}
+          </NativeSelectOption>
+        </NativeSelect>
+      </div>
+
+      <div
+        class="mb-3 flex flex-wrap gap-2"
+        role="group"
+        aria-label="وضعیت خواندن"
+      >
+        <Button
+          v-for="f in readFilters"
+          :key="f.value"
+          size="sm"
+          :variant="readFilter === f.value ? 'default' : 'outline'"
+          :aria-pressed="readFilter === f.value"
+          @click="setFilter(f.value)"
+        >
+          {{ f.label }}
+          <span v-if="f.value === 'unread' && store.unread > 0">({{ toPersianDigits(store.unread) }})</span>
         </Button>
       </div>
 
@@ -83,11 +125,6 @@
                     dir="rtl"
                   >{{ n.body }}</span>
                   <span class="mt-1 flex items-center gap-x-1 text-xs text-muted-foreground">
-                    <Icon
-                      name="lucide:clock"
-                      class="size-3.5"
-                      aria-hidden="true"
-                    />
                     <span dir="rtl">{{ formatNotificationDateTime(n.created_at) }}</span>
                   </span>
                 </span>
@@ -103,7 +140,7 @@
             v-if="!items.length && !loading"
             class="px-4 py-12 text-center text-sm text-muted-foreground"
           >
-            {{ unreadOnly ? 'اعلان خوانده‌نشده‌ای وجود ندارد.' : 'اعلانی وجود ندارد.' }}
+            {{ emptyText }}
           </li>
           <li
             v-if="loading && !items.length"
@@ -148,68 +185,64 @@ const store = useNotificationsStore()
 const items = ref<AppNotification[]>([])
 const hasMore = ref(false)
 const nextBeforeId = ref<number | null>(null)
-const unreadOnly = ref(false)
+const readFilter = ref<'all' | 'unread' | 'read'>('all')
+const query = ref('')
+const category = ref('')
 const loading = ref(false)
 const loadError = ref(false)
+const push = usePush()
+let requestSeq = 0
 
-const iconFor = (type: string) => ({
-  TASK_ASSIGNED: 'lucide:clipboard-list',
-  TASK_REFERRED: 'lucide:corner-up-left',
-  TASK_MENTION: 'lucide:at-sign',
-  TASK_DUE_SOON: 'lucide:alarm-clock',
-  TASK_OVERDUE: 'lucide:alarm-clock-off',
-  REVIEW_RESULT: 'lucide:badge-check',
-  REVIEW_RESUBMITTED: 'lucide:rotate-ccw',
-  CHANGE_REQUEST: 'lucide:file-pen-line',
-  REVIEW_REQUEST: 'lucide:inbox',
-  SAMPLE_SUBMITTED: 'lucide:flask-conical',
-  SAMPLE_APPROVED: 'lucide:check-circle-2',
-  SAMPLE_REJECTED: 'lucide:x-circle',
-  SAMPLE_ON_HOLD: 'lucide:pause-circle',
-  SAMPLE_DISPATCHED: 'lucide:truck',
-  SAMPLE_DELIVERED: 'lucide:package-check',
-  SAMPLE_REMIND_SHIP: 'lucide:package-open',
-  SAMPLE_REMIND_DELIVER: 'lucide:truck',
-  SAMPLE_REMIND_FOLLOWUP: 'lucide:phone-call',
-  SAMPLE_FOLLOWUP_DUE: 'lucide:calendar-clock',
-  SAMPLE_FEEDBACK: 'lucide:message-circle-heart',
-  CUSTOMER_FOLLOWUP_DUE: 'lucide:phone-call',
-  CUSTOMER_FOLLOWUP_OVERDUE: 'lucide:phone-missed',
-} as Record<string, string>)[type] ?? 'lucide:bell'
+const readFilters = [
+  { value: 'all', label: 'همه' },
+  { value: 'unread', label: 'خوانده‌نشده' },
+  { value: 'read', label: 'خوانده‌شده' },
+] as const
 
-const iconColor = (type: string) => (
-  type === 'TASK_OVERDUE' || type === 'CUSTOMER_FOLLOWUP_OVERDUE'
-    ? 'text-destructive'
-    : type === 'TASK_DUE_SOON' || type === 'CUSTOMER_FOLLOWUP_DUE' ? 'text-amber-500' : 'text-primary'
-)
+const iconFor = notificationIcon
+const iconColor = notificationIconColor
+const filtered = computed(() => !!query.value.trim() || !!category.value || readFilter.value !== 'all')
+const emptyText = computed(() => (filtered.value ? 'اعلانی با این شرایط پیدا نشد.' : 'اعلانی وجود ندارد.'))
 
 async function load(reset: boolean) {
-  if (loading.value) return
+  if (loading.value && !reset) return
+  const seq = ++requestSeq // a newer search/filter makes an older, slower answer irrelevant
   loading.value = true
   loadError.value = false
   try {
     const data = await store.fetchPage({
       beforeId: reset ? null : nextBeforeId.value,
-      unreadOnly: unreadOnly.value,
+      read: readFilter.value,
+      q: query.value,
+      category: category.value,
       limit: PAGE_SIZE,
     })
+    if (seq !== requestSeq) return
     items.value = reset ? data.items : [...items.value, ...data.items]
     hasMore.value = data.has_more
     nextBeforeId.value = data.next_before_id
   }
   catch {
-    loadError.value = true
+    if (seq === requestSeq) loadError.value = true
   }
   finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
-function setFilter(value: boolean) {
-  if (unreadOnly.value === value) return
-  unreadOnly.value = value
+function setFilter(value: 'all' | 'unread' | 'read') {
+  if (readFilter.value === value) return
+  readFilter.value = value
   load(true)
 }
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(query, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => load(true), 350)
+})
+watch(category, () => load(true))
+onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
 async function open(n: AppNotification) {
   if (!n.is_read) {
@@ -223,8 +256,11 @@ async function open(n: AppNotification) {
 async function markAll() {
   await store.markAllRead()
   items.value = items.value.map(n => ({ ...n, is_read: true }))
-  if (unreadOnly.value) items.value = []
+  if (readFilter.value === 'unread') items.value = []
 }
 
-onMounted(() => load(true))
+onMounted(() => {
+  load(true)
+  push.refreshState()
+})
 </script>

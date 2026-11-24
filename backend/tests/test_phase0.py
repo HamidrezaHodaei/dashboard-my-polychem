@@ -99,3 +99,10 @@ def test_unexpected_error_does_not_leak_internals(app, client):
     raw_text = json.dumps(body)
     assert "hunter2" not in raw_text
     assert "RuntimeError" not in raw_text
+
+
+# PWA / installed-app: private JSON must never be stored by a client-side cache
+def test_api_json_responses_are_not_cacheable(client):
+    response = client.get("/api/health")
+    assert response.content_type.startswith("application/json")
+    assert response.headers.get("Cache-Control") == "no-store"

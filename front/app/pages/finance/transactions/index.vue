@@ -94,7 +94,7 @@ function exportPdf() { notify.info('خروجی PDF آماده است.') }
               <th class="px-4 py-3 font-medium">مبلغ</th>
               <th class="px-4 py-3 font-medium">روش پرداخت</th>
               <th class="px-4 py-3 font-medium">وضعیت</th>
-              <th class="px-4 py-3 font-medium">عملیات</th>
+              <th class="col-actions px-4 py-3 font-medium">عملیات</th>
             </tr>
           </thead>
           <tbody>
@@ -110,14 +110,14 @@ function exportPdf() { notify.info('خروجی PDF آماده است.') }
               <td class="px-4 py-3">
                 <AppStatusBadge :label="t.status === 'confirmed' ? 'تأییدشده' : t.status === 'pending' ? 'در انتظار' : 'لغوشده'" :tone="t.status === 'confirmed' ? 'gain' : t.status === 'pending' ? 'pending' : 'debt'" />
               </td>
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-1">
-                  <NuxtLink :to="`/finance/transactions/${t.id}`" class="rounded-lg p-1.5 text-ink-700/60 hover:bg-paper-100"> 
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" stroke-linecap="round" stroke-linejoin="round" /><circle cx="12" cy="12" r="3" /></svg>
-                  </NuxtLink>
-                  <button class="rounded-lg p-1.5 text-debt-600/70 hover:bg-debt-50" @click="handleDelete(t)">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                  </button>
+              <td class="col-actions px-4 py-3">
+                <div class="flex items-center justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهده جزئیات', group: 0, to: `/finance/transactions/${t.id}` },
+                      { key: 'delete', label: 'حذف', destructive: true, onSelect: () => handleDelete(t) },
+                    ]"
+                  />
                 </div>
               </td>
             </tr>

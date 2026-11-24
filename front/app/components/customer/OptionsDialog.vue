@@ -87,39 +87,13 @@
             </div>
 
             <div v-if="editingId !== o.id" class="flex shrink-0 gap-0.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                class="size-8"
-                :title="o.is_active ? 'مخفی کردن از گزینه‌ها' : 'نمایش در گزینه‌ها'"
-                :aria-label="o.is_active ? 'مخفی کردن از گزینه‌ها' : 'نمایش در گزینه‌ها'"
-                :disabled="busy"
-                @click="toggle(o)"
-              >
-                <Icon :name="o.is_active ? 'lucide:eye' : 'lucide:eye-off'" class="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="size-8"
-                title="تغییر نام"
-                aria-label="تغییر نام"
-                :disabled="busy"
-                @click="startRename(o)"
-              >
-                <Icon name="lucide:pencil" class="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                class="size-8 text-destructive hover:text-destructive"
-                title="حذف"
-                aria-label="حذف"
-                :disabled="busy"
-                @click="remove(o)"
-              >
-                <Icon name="lucide:trash-2" class="size-4" />
-              </Button>
+              <RowActions
+                :actions="[
+                  { key: 'toggle', label: o.is_active ? 'مخفی کردن از گزینه‌ها' : 'نمایش در گزینه‌ها', group: 0, disabled: busy, onSelect: () => toggle(o) },
+                  { key: 'rename', label: 'تغییر نام', group: 0, disabled: busy, onSelect: () => startRename(o) },
+                  { key: 'delete', label: 'حذف', disabled: busy, destructive: true, onSelect: () => remove(o) },
+                ]"
+              />
             </div>
           </li>
         </ul>

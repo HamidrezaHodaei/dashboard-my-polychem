@@ -30,21 +30,21 @@
             <TableRow>
               <TableHead>نام</TableHead>
               <TableHead>تعداد فروش</TableHead>
-              <TableHead class="text-right">عملیات</TableHead>
+              <TableHead class="col-actions">عملیات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-for="m in store.paymentMethods" :key="m.id" :class="m.is_active ? '' : 'opacity-50'">
               <TableCell dir="auto">{{ m.name }}</TableCell>
               <TableCell class="text-muted-foreground">{{ faNum(m.sales_count) }}</TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-1">
-                  <Button v-if="access.canUpdateCatalog.value" variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openMethod(m)">
-                    <Icon name="lucide:pencil" class="size-4" />
-                  </Button>
-                  <Button v-if="access.canDeleteCatalog.value" variant="ghost" size="icon" class="text-destructive" title="حذف" aria-label="حذف" @click="removeMethod(m)">
-                    <Icon name="lucide:trash-2" class="size-4" />
-                  </Button>
+              <TableCell class="col-actions">
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'edit', label: 'ویرایش', group: 0, show: !!(access.canUpdateCatalog.value), onSelect: () => openMethod(m) },
+                      { key: 'delete', label: 'حذف', show: !!(access.canDeleteCatalog.value), destructive: true, onSelect: () => removeMethod(m) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>
@@ -73,7 +73,7 @@
               <TableHead>ترتیب</TableHead>
               <TableHead>وضعیت</TableHead>
               <TableHead>تعداد استفاده</TableHead>
-              <TableHead class="text-right">عملیات</TableHead>
+              <TableHead class="col-actions">عملیات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -84,14 +84,14 @@
                 <Badge :variant="m.is_active ? 'secondary' : 'outline'">{{ m.is_active ? 'فعال' : 'غیرفعال' }}</Badge>
               </TableCell>
               <TableCell class="text-muted-foreground">{{ faNum(m.usage_count ?? 0) }}</TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openDelivery(m)">
-                    <Icon name="lucide:pencil" class="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" class="text-destructive" title="حذف" aria-label="حذف" @click="removeDelivery(m)">
-                    <Icon name="lucide:trash-2" class="size-4" />
-                  </Button>
+              <TableCell class="col-actions">
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'edit', label: 'ویرایش', group: 0, onSelect: () => openDelivery(m) },
+                      { key: 'delete', label: 'حذف', destructive: true, onSelect: () => removeDelivery(m) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>

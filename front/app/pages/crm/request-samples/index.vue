@@ -163,20 +163,19 @@
                 <RequestSampleStatusBadge v-if="r.feedback_status" :status="r.feedback_status" kind="feedback" />
                 <span v-else class="text-xs text-muted-foreground">—</span>
               </TableCell>
-              <TableCell @click.stop>
-                <div class="flex items-center gap-0.5">
-                  <Button variant="ghost" size="icon" title="مشاهده جزئیات" aria-label="مشاهده جزئیات" as-child>
-                    <NuxtLink :to="`/crm/request-samples/${r.id}`"><Icon name="lucide:eye" class="size-4" /></NuxtLink>
-                  </Button>
-                  <Button v-if="r.my_actions.can_edit" variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openEdit(r.id)">
-                    <Icon name="lucide:pencil" class="size-4" />
-                  </Button>
-                  <Button v-if="r.my_actions.can_follow_up" variant="ghost" size="icon" title="پیگیری" aria-label="پیگیری" as-child>
-                    <NuxtLink :to="`/crm/request-samples/${r.id}?tab=followups`"><Icon name="lucide:phone-call" class="size-4" /></NuxtLink>
-                  </Button>
-                  <Button v-if="r.my_actions.can_delete" variant="ghost" size="icon" class="text-destructive hover:text-destructive" title="حذف" aria-label="حذف" @click="askDelete(r.id, r.code)">
-                    <Icon name="lucide:trash-2" class="size-4" />
-                  </Button>
+              <TableCell
+                class="col-actions"
+                @click.stop
+              >
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهده جزئیات', group: 0, to: `/crm/request-samples/${r.id}` },
+                      { key: 'followup', label: 'پیگیری', group: 0, show: !!(r.my_actions.can_follow_up), to: `/crm/request-samples/${r.id}?tab=followups` },
+                      { key: 'edit', label: 'ویرایش', group: 1, show: !!(r.my_actions.can_edit), onSelect: () => openEdit(r.id) },
+                      { key: 'delete', label: 'حذف', show: !!(r.my_actions.can_delete), destructive: true, onSelect: () => askDelete(r.id, r.code) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>

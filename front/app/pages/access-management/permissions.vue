@@ -60,7 +60,7 @@
           <Table v-else-if="permissions.length">
             <TableHeader>
               <TableRow>
-                <TableHead>کلید</TableHead><TableHead>بخش</TableHead><TableHead>منبع</TableHead><TableHead>عمل</TableHead><TableHead>قابل واگذاری</TableHead><TableHead class="text-right">
+                <TableHead>کلید</TableHead><TableHead>بخش</TableHead><TableHead>منبع</TableHead><TableHead>عمل</TableHead><TableHead>قابل واگذاری</TableHead><TableHead class="col-actions">
                   عملیات
                 </TableHead>
               </TableRow>
@@ -81,31 +81,14 @@
                     {{ p.is_delegable ? 'بله' : 'خیر' }}
                   </Badge>
                 </TableCell>
-                <TableCell class="text-right">
-                  <div class="flex justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="ویرایش"
-                      @click="openEdit(p)"
-                    >
-                      <Icon
-                        name="lucide:pencil"
-                        class="size-4"
-                      />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="حذف"
-                      class="text-destructive"
-                      @click="remove(p)"
-                    >
-                      <Icon
-                        name="lucide:trash-2"
-                        class="size-4"
-                      />
-                    </Button>
+                <TableCell class="col-actions">
+                  <div class="flex justify-center">
+                    <RowActions
+                      :actions="[
+                        { key: 'edit', label: 'ویرایش', group: 0, onSelect: () => openEdit(p) },
+                        { key: 'delete', label: 'حذف', destructive: true, onSelect: () => remove(p) },
+                      ]"
+                    />
                   </div>
                 </TableCell>
               </TableRow>

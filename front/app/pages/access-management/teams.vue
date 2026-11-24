@@ -43,7 +43,7 @@
       <Table v-else-if="teams.length">
         <TableHeader>
           <TableRow>
-            <TableHead>تیم</TableHead><TableHead>دپارتمان</TableHead><TableHead>وضعیت</TableHead><TableHead class="text-right">
+            <TableHead>تیم</TableHead><TableHead>دپارتمان</TableHead><TableHead>وضعیت</TableHead><TableHead class="col-actions">
               عملیات
             </TableHead>
           </TableRow>
@@ -60,42 +60,15 @@
               {{ deptName(team.department_id) }}
             </TableCell>
             <TableCell><AccessStatusBadge :status="team.is_active ? 'active' : 'inactive'" /></TableCell>
-            <TableCell class="text-right">
-              <div class="flex justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="اعضا"
-                  @click="openMembers(team)"
-                >
-                  <Icon
-                    name="lucide:users"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="ویرایش"
-                  @click="openEdit(team)"
-                >
-                  <Icon
-                    name="lucide:pencil"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="حذف"
-                  class="text-destructive"
-                  @click="remove(team)"
-                >
-                  <Icon
-                    name="lucide:trash-2"
-                    class="size-4"
-                  />
-                </Button>
+            <TableCell class="col-actions">
+              <div class="flex justify-center">
+                <RowActions
+                  :actions="[
+                    { key: 'members', label: 'اعضا', group: 0, onSelect: () => openMembers(team) },
+                    { key: 'edit', label: 'ویرایش', group: 1, onSelect: () => openEdit(team) },
+                    { key: 'delete', label: 'حذف', destructive: true, onSelect: () => remove(team) },
+                  ]"
+                />
               </div>
             </TableCell>
           </TableRow>

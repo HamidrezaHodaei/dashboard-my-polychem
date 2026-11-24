@@ -59,12 +59,12 @@ const totalBalance = computed(() => items.value.filter((a) => a.isActive).reduce
         <p class="num mt-4 text-xl font-bold text-ink-900">{{ formatCurrency(a.currentBalance) }}</p>
         <div class="mt-4 flex items-center gap-2 border-t border-paper-100 pt-3">
           <NuxtLink :to="`/finance/accounts/${a.id}`" class="flex-1 rounded-lg border border-paper-200 py-1.5 text-center text-xs font-medium text-ink-800 hover:bg-paper-50">مشاهده دفتر حساب</NuxtLink>
-          <button class="rounded-lg p-1.5 text-ink-700/60 hover:bg-paper-100" @click="openEdit(a)">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          </button>
-          <button class="rounded-lg p-1.5 text-debt-600/70 hover:bg-debt-50" @click="handleDelete(a)">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          </button>
+          <RowActions
+            :actions="[
+              { key: 'edit', label: 'ویرایش', onSelect: () => openEdit(a) },
+              { key: 'delete', label: 'حذف', destructive: true, onSelect: () => handleDelete(a) },
+            ]"
+          />
         </div>
       </div>
     </div>

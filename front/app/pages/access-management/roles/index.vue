@@ -43,7 +43,7 @@
       <Table v-else-if="roles.length">
         <TableHeader>
           <TableRow>
-            <TableHead>نقش</TableHead><TableHead>توضیحات</TableHead><TableHead>سیستمی</TableHead><TableHead>وضعیت</TableHead><TableHead class="text-right">
+            <TableHead>نقش</TableHead><TableHead>توضیحات</TableHead><TableHead>سیستمی</TableHead><TableHead>وضعیت</TableHead><TableHead class="col-actions">
               عملیات
             </TableHead>
           </TableRow>
@@ -75,45 +75,15 @@
               </Badge><span v-else>—</span>
             </TableCell>
             <TableCell><AccessStatusBadge :status="role.is_active ? 'active' : 'inactive'" /></TableCell>
-            <TableCell class="text-right">
-              <div class="flex justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="مجوزها"
-                  as-child
-                >
-                  <NuxtLink :to="`/access-management/roles/${role.id}`">
-                    <Icon
-                      name="lucide:key"
-                      class="size-4"
-                    />
-                  </NuxtLink>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="ویرایش"
-                  @click="openEdit(role)"
-                >
-                  <Icon
-                    name="lucide:pencil"
-                    class="size-4"
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="حذف"
-                  class="text-destructive"
-                  :disabled="role.is_system_role"
-                  @click="remove(role)"
-                >
-                  <Icon
-                    name="lucide:trash-2"
-                    class="size-4"
-                  />
-                </Button>
+            <TableCell class="col-actions">
+              <div class="flex justify-center">
+                <RowActions
+                  :actions="[
+                    { key: 'perm', label: 'مجوزها', group: 0, to: `/access-management/roles/${role.id}` },
+                    { key: 'edit', label: 'ویرایش', group: 1, onSelect: () => openEdit(role) },
+                    { key: 'delete', label: 'حذف', disabled: role.is_system_role, destructive: true, onSelect: () => remove(role) },
+                  ]"
+                />
               </div>
             </TableCell>
           </TableRow>

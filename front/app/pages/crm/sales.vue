@@ -51,7 +51,7 @@
               <TableHead>نوع</TableHead>
               <TableHead>پرداخت</TableHead>
               <TableHead>ثبت‌کننده</TableHead>
-              <TableHead class="text-right">عملیات</TableHead>
+              <TableHead class="col-actions">عملیات</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -79,17 +79,15 @@
                 <p dir="auto">{{ s.created_by_name || '—' }}</p>
                 <p v-if="s.created_at_display" class="whitespace-nowrap text-xs text-muted-foreground" dir="ltr">{{ toPersianDigits(s.created_at_display) }}</p>
               </TableCell>
-              <TableCell class="text-right">
-                <div class="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" title="مشاهده" aria-label="مشاهده" @click="openDialog('view', s)">
-                    <Icon name="lucide:eye" class="size-4" />
-                  </Button>
-                  <Button v-if="access.canUpdateSale.value" variant="ghost" size="icon" title="ویرایش" aria-label="ویرایش" @click="openDialog('edit', s)">
-                    <Icon name="lucide:pencil" class="size-4" />
-                  </Button>
-                  <Button v-if="access.canDeleteSale.value" variant="ghost" size="icon" class="text-destructive" title="حذف" aria-label="حذف" @click="remove(s)">
-                    <Icon name="lucide:trash-2" class="size-4" />
-                  </Button>
+              <TableCell class="col-actions">
+                <div class="flex justify-center">
+                  <RowActions
+                    :actions="[
+                      { key: 'view', label: 'مشاهده', group: 0, onSelect: () => openDialog('view', s) },
+                      { key: 'edit', label: 'ویرایش', group: 1, show: !!(access.canUpdateSale.value), onSelect: () => openDialog('edit', s) },
+                      { key: 'delete', label: 'حذف', show: !!(access.canDeleteSale.value), destructive: true, onSelect: () => remove(s) },
+                    ]"
+                  />
                 </div>
               </TableCell>
             </TableRow>

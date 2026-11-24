@@ -126,12 +126,24 @@ const baseNav: SidebarProps['nav'] = [
         navKey: 'purchase_warehouse',
         children: [
           {
+            title: 'داشبورد درخواست خرید',
+            link: {
+              to: '/inventory/dashboard',
+            },
+            navKey: 'purchase_warehouse',
+          },
+          {
             title: 'درخواست خرید',
-            icon: 'lucide:shopping-cart',
             link: {
               to: '/inventory',
             },
-            activeRoute: ['/inventory'],
+            navKey: 'purchase_warehouse',
+          },
+          {
+            title: 'ثبت درخواست خرید',
+            link: {
+              to: '/inventory/new',
+            },
             navKey: 'purchase_warehouse',
           },
         ],
