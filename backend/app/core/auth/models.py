@@ -39,6 +39,13 @@ class RefreshToken(db.Model):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # The login session this token belongs to. Every rotation of a token keeps the same
+    # session_id, so one login = one session however many times the token is refreshed.
+    # NULL on tokens issued before sessions were recorded.
+    session_id: Mapped[int | None] = mapped_column(
+        BigIntUnsigned,
+        ForeignKey("user_sessions.id", ondelete="SET NULL"), nullable=True
+    )
     # Rotation chain: the token that replaced this one, once rotated.
     replaced_by_token_id: Mapped[int | None] = mapped_column(
         BigIntUnsigned,
@@ -55,3 +62,42 @@ class RefreshToken(db.Model):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<RefreshToken id={self.id} user_id={self.user_id}>"
+
+
+class UserSession(db.Model):
+    """
+    One row per successful login -- the "نشست" shown on the user's activity page.
+
+    Only facts the server really observed are stored: the client IP (as the backend sees it),
+    the User-Agent header and the three labels parsed from it. A column that could not be
+    determined stays NULL -- the UI shows NULL as "ثبت نشده", it never invents a value.
+
+    Lifecycle: created at login; `last_seen_at` moves forward on every token refresh;
+    `logout_at` + `logout_reason` are set on logout ("logout"), on a refresh-token reuse
+    revocation ("token_reuse") or when an admin/password change revokes it ("revoked").
+    A session whose logout_at is NULL and whose newest refresh token is neither revoked nor
+    expired is "active"; one that simply expired has no logout_at and is shown as "expired".
+    """
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_user_sessions_user_login", "user_id", "login_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigIntUnsigned, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigIntUnsigned, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    device_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    os: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    browser: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    login_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    logout_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    logout_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    user: Mapped["User"] = relationship("User")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<UserSession id={self.id} user_id={self.user_id}>"

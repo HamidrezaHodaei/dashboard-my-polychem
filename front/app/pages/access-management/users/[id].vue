@@ -59,6 +59,15 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <Button
+            variant="outline"
+            class="gap-2"
+            as-child
+          >
+            <NuxtLink :to="`/access-management/users/activity/${user.id}`">
+              جزئیات فعالیت
+            </NuxtLink>
+          </Button>
+          <Button
             v-if="canUpdate"
             variant="outline"
             class="gap-2"
@@ -653,9 +662,10 @@ function deptName(id: number | null) {
   if (!id) return '—'
   return departments.value.find(d => d.id === id)?.name || `#${id}`
 }
+// Jalali date + 24h time in Tehran -- the same format as every other timestamp in the panel.
 function formatDate(value: string | null) {
   if (!value) return 'هرگز'
-  return new Date(value).toLocaleString()
+  return formatTehranDateTime(value) || 'هرگز'
 }
 
 async function loadAccess() {

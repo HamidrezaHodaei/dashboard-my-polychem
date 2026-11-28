@@ -68,11 +68,11 @@ async function save() {
           <span class="text-xs text-muted-foreground">{{ u.member_count.toLocaleString('fa-IR') }} کاربر فعال</span>
         </label>
       </div>
-      <div class="flex justify-end gap-2 border-t px-6 py-3">
-        <Button variant="outline" @click="emit('update:open', false)">
+      <div class="flex justify-end gap-2 border-t px-4 py-3 sm:px-6">
+        <Button variant="outline" class="h-11 sm:h-9" @click="emit('update:open', false)">
           انصراف
         </Button>
-        <Button :disabled="saving || loading" @click="save">
+        <Button class="h-11 sm:h-9" :disabled="saving || loading" @click="save">
           ذخیره
         </Button>
       </div>

@@ -26,7 +26,27 @@
         icon="lucide:user-x"
       />
     </div>
-    <Card class="overflow-hidden py-0 shadow-none">
+    <div
+      role="tablist"
+      class="flex gap-1 border-b"
+    >
+      <button
+        v-for="t in sections"
+        :key="t.id"
+        role="tab"
+        :aria-selected="section === t.id"
+        class="-mb-px h-11 border-b-2 px-4 text-sm"
+        :class="section === t.id ? 'border-primary font-medium text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        @click="section = t.id"
+      >
+        {{ t.label }}
+      </button>
+    </div>
+    <AccessLoginEvents v-if="section === 'events'" />
+    <Card
+      v-else
+      class="overflow-hidden py-0 shadow-none"
+    >
       <div class="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
           <div class="relative w-full sm:max-w-sm">
@@ -135,7 +155,16 @@
               </TableCell>
               <TableCell><AccessStatusBadge :status="user.is_active ? 'active' : 'inactive'" /></TableCell>
               <TableCell class="col-actions">
-                <div class="flex justify-center">
+                <div class="flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    as-child
+                  >
+                    <NuxtLink :to="`/access-management/users/activity/${user.id}`">
+                      جزئیات فعالیت
+                    </NuxtLink>
+                  </Button>
                   <RowActions
                     :actions="[
                       { key: 'view', label: 'مشاهدهٔ جزئیات', group: 0, to: `/access-management/users/${user.id}` },
@@ -410,6 +439,8 @@ interface Department { id: number, name: string, organization_id: number }
 
 const auth = useAuthStore()
 
+const section = ref<'users' | 'events'>('users')
+const sections = [{ id: 'users', label: 'کاربران' }, { id: 'events', label: 'رویدادهای ورود و خروج' }] as const
 const query = ref('')
 const statusFilter = ref('all')
 const page = ref(1)
@@ -443,9 +474,10 @@ function departmentsFor(orgId: string) {
   if (orgId === 'none') return departments.value
   return departments.value.filter(d => String(d.organization_id) === orgId)
 }
+// Jalali date + 24h time in Tehran -- the same format as every other timestamp in the panel.
 function formatDate(value: string | null) {
   if (!value) return 'هرگز'
-  return new Date(value).toLocaleString()
+  return formatTehranDateTime(value) || 'هرگز'
 }
 
 async function load() {

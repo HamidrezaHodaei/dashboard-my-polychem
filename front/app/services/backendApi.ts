@@ -133,7 +133,7 @@ export async function apiFetchPage<T>(
   path: string,
   query?: Record<string, string | number | boolean | undefined>,
   _isRetry = false,
-): Promise<{ items: T[], total: number, page: number, perPage: number }> {
+): Promise<{ items: T[], total: number, page: number, perPage: number, meta?: Record<string, unknown> }> {
   const authStore = useAuthStore()
   const headers: Record<string, string> = {}
   if (authStore.accessToken) headers.Authorization = `Bearer ${authStore.accessToken}`
@@ -150,6 +150,7 @@ export async function apiFetchPage<T>(
       total: res.meta?.total ?? res.data.length,
       page: res.meta?.page ?? 1,
       perPage: res.meta?.per_page ?? res.data.length,
+      meta: res.meta as Record<string, unknown> | undefined,
     }
   }
   catch (err: any) {

@@ -178,3 +178,57 @@ export function formatDueDateTime(date: string | null | undefined, time?: string
 
 /** Persian month + year for a Jalali position, e.g. "آبان ۱۴۰۵". */
 export const jalaliMonthTitle = (jy: number, jm: number) => `${JALALI_MONTHS[jm - 1]} ${toPersianDigits(jy)}`
+
+// ---------------------------------------------------------------------------
+// Timestamps (server UTC -> Tehran, Jalali). One format everywhere:
+//   date      ۱۴۰۵/۰۹/۰۳
+//   time      ۱۴:۳۰  (or ۱۴:۳۰:۰۵ with seconds)
+//   dateTime  ۱۴۰۵/۰۹/۰۳ ۱۴:۳۰
+// ---------------------------------------------------------------------------
+
+function tehranParts(iso: string | null | undefined, withSeconds: boolean): Record<string, string> | null {
+  if (!iso) return null
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`)
+  if (Number.isNaN(d.getTime())) return null
+  const parts = new Intl.DateTimeFormat('fa-IR-u-ca-persian-nu-latn', {
+    timeZone: TEHRAN_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', ...(withSeconds ? { second: '2-digit' } : {}), hourCycle: 'h23',
+  }).formatToParts(d)
+  return Object.fromEntries(parts.map(p => [p.type, p.value]))
+}
+
+/** "۱۴۰۵/۰۹/۰۳" -- '' when blank/invalid. */
+export function formatTehranDate(iso: string | null | undefined): string {
+  const p = tehranParts(iso, false)
+  return p ? toPersianDigits(`${p.year}/${p.month}/${p.day}`) : ''
+}
+
+/** "۱۴:۳۰" (or "۱۴:۳۰:۰۵") -- '' when blank/invalid. */
+export function formatTehranTime(iso: string | null | undefined, withSeconds = false): string {
+  const p = tehranParts(iso, withSeconds)
+  if (!p) return ''
+  return toPersianDigits(`${p.hour}:${p.minute}${withSeconds ? `:${p.second}` : ''}`)
+}
+
+/** Like formatTehranDateTime but with seconds -- for audit / login events where the exact moment matters. */
+export function formatTehranDateTimeSeconds(iso: string | null | undefined): string {
+  const date = formatTehranDate(iso)
+  return date ? `${date} ${formatTehranTime(iso, true)}` : ''
+}
+
+/** The Tehran calendar day of a timestamp as "YYYY-MM-DD" (Gregorian ISO) -- used to group a timeline by day. */
+export function tehranDayKey(iso: string | null | undefined): string {
+  const d = iso ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`) : null
+  if (!d || Number.isNaN(d.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TEHRAN_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
+/** "یکشنبه ۱۴۰۵/۰۹/۰۳" style heading for a Gregorian ISO day key. */
+export function formatDayHeading(dayKey: string): string {
+  const j = isoToJalali(dayKey)
+  if (!j) return dayKey
+  const names = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
+  return `${names[jalaliWeekday(j.jy, j.jm, j.jd)]} ${toPersianDigits(`${j.jd}`)} ${JALALI_MONTHS[j.jm - 1]} ${toPersianDigits(j.jy)}`
+}

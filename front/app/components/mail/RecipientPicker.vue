@@ -48,22 +48,21 @@ function onKey(e: KeyboardEvent) {
 
 <template>
   <div class="relative" dir="rtl">
-    <div class="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1 focus-within:ring-2 focus-within:ring-ring/40">
+    <div class="flex min-h-11 flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1 focus-within:ring-2 focus-within:ring-ring/40 sm:min-h-9">
       <span
         v-for="p in modelValue"
         :key="p.id"
-        class="flex items-center gap-1 rounded-full bg-muted py-0.5 ps-0.5 pe-2 text-xs"
+        class="flex max-w-full items-center gap-1 rounded-sm border bg-muted/50 py-0.5 ps-2 pe-0.5 text-xs"
       >
-        <MailPersonAvatar :person="p" size="size-5" />
-        <span class="max-w-40 truncate">{{ p.full_name }}</span>
-        <button type="button" class="text-muted-foreground hover:text-destructive" :aria-label="`حذف ${p.full_name}`" @click="remove(p.id)">
-          <Icon name="lucide:x" class="size-3" />
+        <span class="max-w-40 truncate sm:max-w-56">{{ p.full_name }}</span>
+        <button type="button" class="px-2 py-1.5 text-base leading-none text-muted-foreground hover:text-destructive" :aria-label="`حذف ${p.full_name}`" @click="remove(p.id)">
+          ×
         </button>
       </span>
       <input
         v-model="query"
         dir="auto"
-        class="min-w-32 flex-1 bg-transparent py-1 text-right text-sm outline-none placeholder:text-right placeholder:text-muted-foreground"
+        class="min-w-32 flex-1 bg-transparent py-2 text-right text-sm outline-none sm:py-1 placeholder:text-right placeholder:text-muted-foreground"
         :placeholder="modelValue.length ? '' : (placeholder || 'جست‌وجوی نام، نام کاربری یا ایمیل')"
         @focus="onFocus"
         @blur="onBlur"
@@ -85,11 +84,10 @@ function onKey(e: KeyboardEvent) {
         v-for="(p, i) in results"
         :key="p.id"
         type="button"
-        class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start hover:bg-accent"
+        class="flex min-h-11 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start hover:bg-accent"
         :class="i === active && 'bg-accent'"
         @mousedown.prevent="add(p)"
       >
-        <MailPersonAvatar :person="p" size="size-8" />
         <span class="min-w-0 flex-1">
           <span class="block truncate text-sm">{{ p.full_name }}</span>
           <span class="block truncate text-xs text-muted-foreground" dir="ltr">{{ p.email }} · @{{ p.username }}</span>

@@ -112,8 +112,8 @@ async function close(v: boolean) {
 
 <template>
   <Dialog :open="open" @update:open="close">
-    <DialogContent dir="rtl" class="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-      <DialogHeader class="border-b px-5 py-3 text-right">
+    <DialogContent dir="rtl" class="flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-md p-0 max-sm:top-0 max-sm:left-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-screen max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none sm:max-w-2xl">
+      <DialogHeader class="border-b px-4 py-3 text-right sm:px-5">
         <DialogTitle class="text-base font-semibold">
           {{ init.parentId ? 'پاسخ' : init.subject?.startsWith('Fwd:') ? 'ارجاع نامه' : 'نامهٔ جدید' }}
         </DialogTitle>
@@ -122,59 +122,57 @@ async function close(v: boolean) {
         </DialogDescription>
       </DialogHeader>
 
-      <div class="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-        <div class="flex items-start gap-3">
-          <span class="w-12 shrink-0 pt-2 text-sm text-muted-foreground">به</span>
+      <div class="flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5">
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+          <span class="shrink-0 text-sm text-muted-foreground sm:w-14 sm:pt-2">گیرنده</span>
           <div class="min-w-0 flex-1">
             <MailRecipientPicker v-model="to" :exclude="cc.map(p => p.id)" />
           </div>
-          <Button v-if="!showCc" variant="ghost" size="sm" type="button" @click="showCc = true">
-            رونوشت
+          <Button v-if="!showCc" variant="outline" type="button" class="h-11 sm:h-9" @click="showCc = true">
+            افزودن رونوشت
           </Button>
         </div>
-        <div v-if="showCc" class="flex items-start gap-3">
-          <span class="w-12 shrink-0 pt-2 text-sm text-muted-foreground">رونوشت</span>
+        <div v-if="showCc" class="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3">
+          <span class="shrink-0 text-sm text-muted-foreground sm:w-14 sm:pt-2">رونوشت</span>
           <div class="min-w-0 flex-1">
             <MailRecipientPicker v-model="cc" :exclude="to.map(p => p.id)" placeholder="افزودن گیرندهٔ رونوشت (بدون محدودیت تعداد)…" />
           </div>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="w-12 shrink-0 text-sm text-muted-foreground">موضوع</span>
-          <Input v-model="subject" dir="auto" maxlength="300" class="text-right placeholder:text-right" placeholder="موضوع نامه" />
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+          <span class="shrink-0 text-sm text-muted-foreground sm:w-14">موضوع</span>
+          <Input v-model="subject" dir="auto" maxlength="300" class="h-11 text-right placeholder:text-right sm:h-9" placeholder="موضوع نامه" />
         </div>
-        <Textarea v-model="body" dir="auto" rows="10" class="text-right min-h-48 resize-y" placeholder="... متن نامه" />
+        <Textarea v-model="body" dir="auto" rows="10" class="text-right min-h-48 resize-y" placeholder="متن نامه را بنویسید" />
 
         <div v-if="files.length || uploading" class="space-y-1.5">
-          <div v-for="f in files" :key="f.id" class="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-            <Icon name="lucide:paperclip" class="size-4 text-muted-foreground" />
+          <div v-for="f in files" :key="f.id" class="flex min-h-11 items-center gap-3 rounded-md border px-3 py-1.5 text-sm">
             <span class="min-w-0 flex-1 truncate" dir="auto">{{ f.name }}</span>
-            <span class="text-xs text-muted-foreground">{{ formatFileSize(f.size) }}</span>
-            <button type="button" class="text-muted-foreground hover:text-destructive" :aria-label="`حذف ${f.name}`" @click="dropFile(f)">
-              <Icon name="lucide:x" class="size-4" />
+            <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{{ formatFileSize(f.size) }}</span>
+            <button type="button" class="shrink-0 px-2 py-2 text-destructive hover:underline" :aria-label="`حذف ${f.name}`" @click="dropFile(f)">
+              حذف
             </button>
           </div>
-          <p v-if="uploading" class="flex items-center gap-2 text-xs text-muted-foreground">
-            <Icon name="lucide:loader-circle" class="size-3.5 animate-spin" /> در حال بارگذاری فایل…
+          <p v-if="uploading" class="text-xs text-muted-foreground">
+            در حال بارگذاری فایل…
           </p>
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-5 py-3">
+      <div class="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
         <input ref="fileInput" type="file" multiple class="hidden" :accept="limits?.allowed_extensions.join(',')" @change="onPick">
-        <Button variant="outline" size="sm" type="button" class="gap-1.5" :disabled="!!uploading" @click="fileInput?.click()">
-          <Icon name="lucide:paperclip" class="size-4" /> پیوست
+        <Button variant="outline" type="button" class="h-11 sm:h-9" :disabled="!!uploading" @click="fileInput?.click()">
+          پیوست فایل
         </Button>
-        <span v-if="limits" class="text-[11px] text-muted-foreground">
+        <span v-if="limits" class="order-last w-full text-[11px] text-muted-foreground sm:order-none sm:w-auto">
           تا {{ limits.max_files.toLocaleString('fa-IR') }} فایل، هر کدام حداکثر {{ limits.max_file_mb.toLocaleString('fa-IR') }} مگابایت
           <template v-if="totalSize"> · مجموع {{ formatFileSize(totalSize) }}</template>
         </span>
         <div class="ms-auto flex gap-2">
-          <Button variant="outline" size="sm" type="button" :disabled="!hasContent || sending" @click="saveDraft()">
+          <Button variant="outline" type="button" class="h-11 sm:h-9" :disabled="!hasContent || sending" @click="saveDraft()">
             ذخیرهٔ پیش‌نویس
           </Button>
-          <Button size="sm" type="button" class="gap-1.5" :disabled="!canSend" @click="send">
-            <Icon :name="sending ? 'lucide:loader-circle' : 'lucide:send'" class="size-4" :class="sending && 'animate-spin'" />
-            ارسال
+          <Button type="button" class="h-11 px-6 sm:h-9" :disabled="!canSend" @click="send">
+            {{ sending ? 'در حال ارسال…' : 'ارسال' }}
           </Button>
         </div>
       </div>

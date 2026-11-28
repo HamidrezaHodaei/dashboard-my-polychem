@@ -38,7 +38,8 @@ from flask_jwt_extended import create_access_token
 
 from app.core.audit_logs.models import AuditLog
 from app.core.auth.exceptions import AuthenticationFailed
-from app.core.auth.models import RefreshToken
+from app.core.auth.models import RefreshToken, UserSession
+from app.core.auth.useragent import clean_user_agent, parse_user_agent
 from app.core.users.models import User
 from app.extensions import db
 from app.utils.exceptions import ConflictError
@@ -103,7 +104,7 @@ def _generate_raw_refresh_token() -> str:
     return secrets.token_urlsafe(64)
 
 
-def _issue_refresh_token(user: User) -> tuple[RefreshToken, str]:
+def _issue_refresh_token(user: User, session_id: int | None = None) -> tuple[RefreshToken, str]:
     raw_token = _generate_raw_refresh_token()
     lifetime_days = current_app.config["REFRESH_TOKEN_EXPIRES_DAYS"]
     now = datetime.now(timezone.utc)
@@ -112,6 +113,7 @@ def _issue_refresh_token(user: User) -> tuple[RefreshToken, str]:
         token_hash=_hash_token(raw_token),
         issued_at=now,
         expires_at=now + timedelta(days=lifetime_days),
+        session_id=session_id,
     )
     db.session.add(row)
     db.session.flush()  # assign row.id before it's referenced elsewhere
@@ -128,7 +130,7 @@ def _issue_access_token(user: User) -> str:
     return create_access_token(identity=str(user.id))
 
 
-def _revoke_all_active_tokens_for_user(user_id: int, *, now: datetime) -> int:
+def _revoke_all_active_tokens_for_user(user_id: int, *, now: datetime, reason: str = "revoked") -> int:
     active_tokens = (
         db.session.query(RefreshToken)
         .filter(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
@@ -136,7 +138,54 @@ def _revoke_all_active_tokens_for_user(user_id: int, *, now: datetime) -> int:
     )
     for token in active_tokens:
         token.revoked_at = now
+    _end_open_sessions(user_id, now=now, reason=reason)
     return len(active_tokens)
+
+
+# ---------------------------------------------------------------------
+# Sessions (the per-user activity page reads these)
+# ---------------------------------------------------------------------
+
+
+def _client_meta(user_agent: str | None) -> dict:
+    """What the server really knows about the client: the (truncated) UA string + parsed labels."""
+    ua = clean_user_agent(user_agent)
+    return {"user_agent": ua, **parse_user_agent(ua)}
+
+
+def _start_session(user: User, *, ip_address: str | None, user_agent: str | None, now: datetime) -> UserSession:
+    meta = _client_meta(user_agent)
+    session = UserSession(
+        user_id=user.id,
+        ip_address=ip_address,
+        user_agent=meta["user_agent"],
+        device_type=meta["device_type"],
+        os=meta["os"],
+        browser=meta["browser"],
+        login_at=now,
+        last_seen_at=now,
+    )
+    db.session.add(session)
+    db.session.flush()
+    return session
+
+
+def _end_open_sessions(user_id: int, *, now: datetime, reason: str) -> None:
+    for session in (
+        db.session.query(UserSession)
+        .filter(UserSession.user_id == user_id, UserSession.logout_at.is_(None))
+        .all()
+    ):
+        session.logout_at = now
+        session.logout_reason = reason
+
+
+def _touch_session(session_id: int | None, *, now: datetime) -> None:
+    if session_id is None:
+        return
+    session = db.session.get(UserSession, session_id)
+    if session is not None and session.logout_at is None:
+        session.last_seen_at = now
 
 
 # ---------------------------------------------------------------------
@@ -192,7 +241,7 @@ def _find_user_by_identifier(identifier: str) -> User | None:
 
 
 def authenticate(
-    identifier: str, password: str, *, ip_address: str | None = None
+    identifier: str, password: str, *, ip_address: str | None = None, user_agent: str | None = None
 ) -> tuple[User, str, str]:
     """
     Returns (user, access_token, raw_refresh_token) on success.
@@ -218,14 +267,20 @@ def authenticate(
             user_id=user.id if user is not None else None,
             action="login_failure",
             ip_address=ip_address,
+            metadata=_client_meta(user_agent),
         )
         db.session.commit()
         raise AuthenticationFailed(_GENERIC_LOGIN_ERROR)
 
-    user.last_login_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    user.last_login_at = now
+    session = _start_session(user, ip_address=ip_address, user_agent=user_agent, now=now)
     access_token = _issue_access_token(user)
-    _refresh_row, raw_refresh_token = _issue_refresh_token(user)
-    _write_audit_event(user_id=user.id, action="login_success", ip_address=ip_address)
+    _refresh_row, raw_refresh_token = _issue_refresh_token(user, session.id)
+    _write_audit_event(
+        user_id=user.id, action="login_success", ip_address=ip_address,
+        metadata={**_client_meta(user_agent), "session_id": session.id},
+    )
     db.session.commit()
     return user, access_token, raw_refresh_token
 
@@ -235,7 +290,9 @@ def authenticate(
 # ---------------------------------------------------------------------
 
 
-def refresh(raw_refresh_token: str | None, *, ip_address: str | None = None) -> tuple[User, str, str | None]:
+def refresh(
+    raw_refresh_token: str | None, *, ip_address: str | None = None, user_agent: str | None = None
+) -> tuple[User, str, str | None]:
     """
     Validate and rotate a refresh token. Returns
     (user, new_access_token, new_raw_refresh_token) on success.
@@ -271,9 +328,10 @@ def refresh(raw_refresh_token: str | None, *, ip_address: str | None = None) -> 
             user = db.session.get(User, row.user_id)
             if user is not None and user.is_active and user.deleted_at is None:
                 access_token = _issue_access_token(user)
+                _touch_session(row.session_id, now=now)
                 _write_audit_event(
                     user_id=user.id, action="refresh_success", ip_address=ip_address,
-                    metadata={"reason": "rotation_grace"},
+                    metadata={"reason": "rotation_grace", "session_id": row.session_id},
                 )
                 db.session.commit()
                 return user, access_token, None
@@ -281,7 +339,7 @@ def refresh(raw_refresh_token: str | None, *, ip_address: str | None = None) -> 
 
         # Reuse of a token that was already rotated/revoked -- treat as
         # a theft signal (SECURITY.md §1) and revoke the whole chain.
-        revoked_count = _revoke_all_active_tokens_for_user(row.user_id, now=now)
+        revoked_count = _revoke_all_active_tokens_for_user(row.user_id, now=now, reason="token_reuse")
         _write_audit_event(
             user_id=row.user_id, action="refresh_reuse_detected", ip_address=ip_address
         )
@@ -301,12 +359,16 @@ def refresh(raw_refresh_token: str | None, *, ip_address: str | None = None) -> 
     if user is None or not user.is_active or user.deleted_at is not None:
         raise AuthenticationFailed(_GENERIC_REFRESH_ERROR)
 
-    new_row, new_raw_token = _issue_refresh_token(user)
+    new_row, new_raw_token = _issue_refresh_token(user, row.session_id)
     row.revoked_at = now
     row.replaced_by_token_id = new_row.id
+    _touch_session(row.session_id, now=now)
 
     access_token = _issue_access_token(user)
-    _write_audit_event(user_id=user.id, action="refresh_success", ip_address=ip_address)
+    _write_audit_event(
+        user_id=user.id, action="refresh_success", ip_address=ip_address,
+        metadata={"session_id": row.session_id} if row.session_id else None,
+    )
     db.session.commit()
     return user, access_token, new_raw_token
 
@@ -316,7 +378,7 @@ def refresh(raw_refresh_token: str | None, *, ip_address: str | None = None) -> 
 # ---------------------------------------------------------------------
 
 
-def logout(raw_refresh_token: str | None, *, ip_address: str | None = None) -> None:
+def logout(raw_refresh_token: str | None, *, ip_address: str | None = None, user_agent: str | None = None) -> None:
     """
     Revoke the current refresh token if a valid, not-already-revoked row
     is found. Always succeeds from the caller's perspective -- safe to
@@ -327,8 +389,17 @@ def logout(raw_refresh_token: str | None, *, ip_address: str | None = None) -> N
         token_hash = _hash_token(raw_refresh_token)
         row = db.session.query(RefreshToken).filter_by(token_hash=token_hash).one_or_none()
         if row is not None and row.revoked_at is None:
-            row.revoked_at = datetime.now(timezone.utc)
-            _write_audit_event(user_id=row.user_id, action="logout", ip_address=ip_address)
+            now = datetime.now(timezone.utc)
+            row.revoked_at = now
+            if row.session_id is not None:
+                session = db.session.get(UserSession, row.session_id)
+                if session is not None and session.logout_at is None:
+                    session.logout_at = now
+                    session.logout_reason = "logout"
+            _write_audit_event(
+                user_id=row.user_id, action="logout", ip_address=ip_address,
+                metadata={**_client_meta(user_agent), **({"session_id": row.session_id} if row.session_id else {})},
+            )
     db.session.commit()
 
 

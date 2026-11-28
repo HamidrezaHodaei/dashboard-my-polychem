@@ -2,7 +2,7 @@
 from flask import Blueprint, g, request
 
 from app.core.auth.decorators import require_authenticated
-from app.core.users import services
+from app.core.users import activity, services
 from app.core.users.schemas import (
     PermissionMatrixUpdate,
     UserCreate,
@@ -38,6 +38,50 @@ def list_users():
     return success_response(
         data=[_dump(item) for item in items],
         meta={"page": page, "per_page": per_page, "total": total},
+    )
+
+
+@bp.get("/login-events")
+@require_authenticated
+def list_login_events():
+    """Login / logout / failed-login events of every user the actor may read (newest first)."""
+    page, per_page = parse_pagination(request.args)
+    a = request.args
+    data = activity.list_login_events(
+        g.current_user, page=page, per_page=per_page, q=a.get("q"), event=a.get("event"),
+        user_id=a.get("user_id", type=int), date_from=a.get("date_from"), date_to=a.get("date_to"),
+        sort=a.get("sort", "newest"),
+    )
+    return success_response(
+        data=data["items"], meta={"page": page, "per_page": per_page, "total": data["total"]},
+    )
+
+
+@bp.get("/<int:user_id>/activity/sessions")
+@require_authenticated
+def user_activity_sessions(user_id: int):
+    page, per_page = parse_pagination(request.args)
+    data = activity.list_sessions(
+        g.current_user, user_id, page=page, per_page=per_page, status=request.args.get("status"),
+    )
+    return success_response(
+        data=data["items"],
+        meta={"page": page, "per_page": per_page, "total": data["total"], "recording_since": data["recording_since"]},
+    )
+
+
+@bp.get("/<int:user_id>/activity/timeline")
+@require_authenticated
+def user_activity_timeline(user_id: int):
+    page, per_page = parse_pagination(request.args)
+    a = request.args
+    data = activity.list_timeline(
+        g.current_user, user_id, page=page, per_page=per_page, q=a.get("q"), category=a.get("category"),
+        date_from=a.get("date_from"), date_to=a.get("date_to"), sort=a.get("sort", "newest"),
+    )
+    return success_response(
+        data=data["items"],
+        meta={"page": page, "per_page": per_page, "total": data["total"], "first_event_at": data["first_event_at"]},
     )
 
 

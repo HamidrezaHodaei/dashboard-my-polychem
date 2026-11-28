@@ -27,7 +27,7 @@ from app.core.authorization.models import (  # noqa: F401
     UserPermissionScope,
     Delegation,
 )
-from app.core.auth.models import RefreshToken  # noqa: F401
+from app.core.auth.models import RefreshToken, UserSession  # noqa: F401
 from app.core.audit_logs.models import AuditLog  # noqa: F401
 from app.modules.tasks.models import (  # noqa: F401
     Task,

@@ -109,7 +109,8 @@ def login():
 
     payload = LoginRequest.model_validate(request.get_json(silent=True) or {})
     user, access_token, raw_refresh_token = services.authenticate(
-        payload.identifier, payload.password, ip_address=request.remote_addr
+        payload.identifier, payload.password,
+        ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent"),
     )
     response, status_code = success_response(
         data={
@@ -124,7 +125,7 @@ def login():
 @bp.post("/auth/refresh")
 def refresh():
     user, access_token, new_raw_refresh_token = services.refresh(
-        _current_refresh_cookie(), ip_address=request.remote_addr
+        _current_refresh_cookie(), ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent"),
     )
     response, status_code = success_response(data={"access_token": access_token})
     if new_raw_refresh_token is not None:  # None = rotation-grace replay: keep the newer cookie
@@ -134,7 +135,9 @@ def refresh():
 
 @bp.post("/auth/logout")
 def logout():
-    services.logout(_current_refresh_cookie(), ip_address=request.remote_addr)
+    services.logout(
+        _current_refresh_cookie(), ip_address=request.remote_addr, user_agent=request.headers.get("User-Agent"),
+    )
     response, status_code = success_response(data={})
     _clear_refresh_cookie(response)
     return response, status_code

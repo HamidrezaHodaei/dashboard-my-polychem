@@ -62,28 +62,31 @@ export const MAIL_FOLDERS: { id: MailFolder, label: string, icon: string }[] = [
   { id: 'trash', label: 'سطل زباله', icon: 'lucide:trash-2' },
   { id: 'archive', label: 'بایگانی', icon: 'lucide:archive' },
 ]
+// Labels are plain text tags: no per-label colours. Only «فوری» gets the theme's destructive tone,
+// because urgency is the one label that carries meaning by itself.
 export const MAIL_LABELS: { id: MailLabel, label: string, color: string }[] = [
-  { id: 'urgent', label: 'فوری', color: 'bg-pink-500' },
-  { id: 'work', label: 'کاری', color: 'bg-violet-500' },
-  { id: 'finance', label: 'مالی', color: 'bg-lime-500' },
-  { id: 'meeting', label: 'جلسه', color: 'bg-orange-500' },
-  { id: 'info', label: 'اطلاع‌رسانی', color: 'bg-teal-500' },
+  { id: 'urgent', label: 'فوری', color: 'text-destructive' },
+  { id: 'work', label: 'کاری', color: '' },
+  { id: 'finance', label: 'مالی', color: '' },
+  { id: 'meeting', label: 'جلسه', color: '' },
+  { id: 'info', label: 'اطلاع‌رسانی', color: '' },
 ]
 export const labelStyle = (id: string) => MAIL_LABELS.find(l => l.id === id)
 
 export const mailInitials = (name: string) => (name || '?').trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('')
 
+/**
+ * List column: today -> "۱۴:۳۰", otherwise the Jalali date "۱۴۰۵/۰۹/۰۳" (Tehran time, like everywhere else).
+ */
 export function formatMailDate(iso: string | null): string {
   if (!iso) return ''
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  if (diff < 60_000) return 'هم‌اکنون'
-  const sameDay = new Date().toDateString() === d.toDateString()
-  if (sameDay) return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString('fa-IR', { month: 'long', day: 'numeric' })
+  const today = todayIso()
+  return tehranDayKey(iso) === today ? formatTehranTime(iso) : formatTehranDate(iso)
 }
+/** Detail header: "۱۴۰۵/۰۹/۰۳ - ساعت ۱۴:۳۰". */
 export function formatMailDateLong(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }) : ''
+  if (!iso) return ''
+  return `${formatTehranDate(iso)} - ساعت ${formatTehranTime(iso)}`
 }
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes.toLocaleString('fa-IR')} B`
